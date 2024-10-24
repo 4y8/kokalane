@@ -25,4 +25,4 @@ type stmt
   | SVar of string * expr list
   | SVal of string * expr list
 
-type decl = { name : string ; param : (string * ty) list ; body : expr list }
+type decl = { name : string ; arg : (string * ty) list ; body : expr list }
