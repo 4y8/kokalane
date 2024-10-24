@@ -1,3 +1,7 @@
+%{
+    open Syntax
+%}
+
 %token ELIF ELSE FN FUN IF RETURN THEN VAL VAR
 %token <string>STRING
 %token <int>INT
@@ -7,9 +11,9 @@
 %token LPAR RPAR LCUR RCUR LANG RANG
 %token EOF
 %start file
-%type unit
+%type <decl list> file
 
 %%
 
 file:
-  EOF {()}
+  EOF {[]}
