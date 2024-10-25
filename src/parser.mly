@@ -15,7 +15,6 @@
 %start file
 %type <decl list> file
 
-%nonassoc RETURN
 %nonassoc WAL
 %left PLUS DPLUS MINUS
 %left TIMES
@@ -53,19 +52,24 @@ atom:
 bexpr:
     a=atom { a }
   | x=IDENT WAL e=bexpr { Wal (x, e) }
-  | RETURN e=expr { Ret e }
   | e1=bexpr TIMES e2=bexpr { Bop (e1, Mul, e2) }
   | e1=bexpr PLUS e2=bexpr { Bop (e1, Add, e2) }
 ;
 
+(* on crée cette règle pour éviter les conflits shift/reduce *)
+rexpr:
+    b=bexpr { b }
+  | RETURN e=expr { Ret e }
+;
+
 stmt:
     e=expr SCOL+ { SExpr e }
-  | VAL x=IDENT ASS l=bexpr SCOL+ { SVal (x, l) }
-  | VAR x=IDENT WAL l=bexpr SCOL+ { SVar (x, l) }
+  | VAL x=IDENT ASS l=expr SCOL+ { SVal (x, l) }
+  | VAR x=IDENT WAL l=expr SCOL+ { SVar (x, l) }
 ;
 
 expr:
-    e=bexpr { e }
+    e=rexpr { e }
   | LCUR SCOL* s=stmt* RCUR { Blk s }
 ;
 
