@@ -27,26 +27,28 @@ lit:
 ;
 
 atom:
-    x=ident { Var x }
+    x=IDENT { Var x }
   | f=atom LPAR l=farg RPAR { App(f, l) }
   | l=lit { Lit l }
 ;
 
 bexpr:
     a=atom { a }
+;
+
 stmt:
-    e=bexpr SCOL+ { SExpr e }
-  | VAL x=ident ASS l=bexpr SCOL+ { SVal (x, l) }
-  | VAR x=ident WAL l=bexpr SCOL+ { SVar (x, l) }
+    e=expr SCOL+ { SExpr e }
+  | VAL x=IDENT ASS l=bexpr SCOL+ { SVal (x, l) }
+  | VAR x=IDENT WAL l=bexpr SCOL+ { SVar (x, l) }
 ;
 
 expr:
-    e=bexpr { [e] }
-  | LCUR SCOL* s=stmt* RCUR { s }
+    e=bexpr { e }
+  | LCUR SCOL* s=stmt* RCUR { Blk s }
 ;
 
 funbody:
-  LPAR RPAR EOF e=expr { ([], e) }
+  LPAR RPAR e=expr { ([], e) }
 ;
 
 decl:

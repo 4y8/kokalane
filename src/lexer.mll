@@ -1,17 +1,13 @@
 {
   open Parser
+  open Error
+
   let ident_tbl = Hashtbl.create 63
 
-  List.iter (fun (k, v) -> Hashtbl.add ident_tbl k v)
+  let _ = List.iter (fun (k, v) -> Hashtbl.add ident_tbl k v)
     ["elif", ELIF; "else", ELSE; "fn", FN; "fun", FUN; "if", IF;
      "return", RETURN; "then", THEN; "val", VAL; "var", VAR]
 
-  let error lexbuf msg =
-    let bg = Lexing.lexeme_start_p lexbuf in
-    let nd = Lexing.lexeme_end_p lexbuf in
-    Printf.fprintf stderr "File \"%s\", line %d, characters %d-%d:\n%s"
-      bg.pos_fname bg.pos_lnum bg.pos_bol nd.pos_bol msg;
-    exit 1
 }
 
 let digit = ['0'-'9']
@@ -20,7 +16,8 @@ let upper = ['A'-'Z']
 let other = lower | upper | digit | '-'
 
 rule lexer = parse
-  | [" " "\t" "\n" "\r"] { lexer lexbuf } 
+  | [' ' '\t' '\r'] { lexer lexbuf }
+  | '\n' { Lexing.new_line lexbuf; lexer lexbuf }
   | "//" [^'\n']* '\n' { Lexing.new_line lexbuf ; lexer lexbuf }
   | "++" { DPLUS }
   | "+" { PLUS }
@@ -35,12 +32,17 @@ rule lexer = parse
   | "," { COMMA }
   | ";" { SCOL }
   | ":" { DCOL }
+  | "(" { LPAR }
+  | ")" { RPAR }
+  | "{" { LCUR }
+  | "}" { RCUR }
   | "/*" { comment lexbuf }
-  | ('-'? ('0' | ['1'-'9'] digit*)) as s { INT (inf_of_string s) }
+  | ('-'? ('0' | ['1'-'9'] digit*)) as s { INT (int_of_string s) }
   | (lower other* '\''*) as s { match Hashtbl.find_opt ident_tbl s with
     None -> IDENT s | Some t -> t }
-  | '"' { STRING (string lexbuf) }
+  | '"' { STRING (string [] lexbuf) }
   | eof { EOF }
+  | _ as c { error lexbuf (Printf.sprintf "Unknown character : %c" c) }
 
 and comment = parse
   | "*/" { lexer lexbuf }
@@ -51,12 +53,14 @@ and string acc = parse
   | '"' { List.rev acc |> List.to_seq |> String.of_seq }
   | '\\' (_ as c)
     { match c with
-        '"' -> '"' :: string lexbuf
-      | '\\' ->  '\\' :: string lexbuf
-      | 't' ->  '\t' :: string lexbuf
-      | 'n' ->  '\n' :: string lexbuf
+        '"' -> string ('"' :: acc) lexbuf
+      | '\\' -> string ('\\' :: acc) lexbuf
+      | 't' -> string ('\t' :: acc) lexbuf
+      | 'n' -> string ('\n' :: acc) lexbuf
       | c -> error lexbuf (Printf.sprintf "Unknown control sequence : %c" c) }
-  | _ as c { c :: string lexbuf }
+  | '\n' { error lexbuf "Newline character in string" }
+  | _ as c { string (c :: acc) lexbuf }
+
 {
 
 }
