@@ -31,8 +31,6 @@ rule lexer = parse
   | "=" { ASS }
   | "<=" { LEQ }
   | ">=" { GEQ }
-  | "<" { LT }
-  | ">" { GT }
   | "||" { OR }
   | "&&" { AND }
   | "." { DOT }
@@ -45,6 +43,8 @@ rule lexer = parse
   | "}" { RCUR }
   | "[" { LSQU }
   | "]" { RSQU }
+  | "<" { LANG }
+  | ">" { RANG }
   | "/*" { comment lexbuf }
   | ('-'? ('0' | ['1'-'9'] digit*)) as s { INT (int_of_string s) }
   | (lower other* '\''*) as s { match Hashtbl.find_opt ident_tbl s with
