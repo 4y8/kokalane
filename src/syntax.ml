@@ -1,5 +1,5 @@
 type op =
-    Add | Sub | Mul | Div | Idiv | Mod| And | Or | Leq | Geq | Eq | Dif | Gt | Lt
+    Add | Sub | Mul | Div | Idiv | Mod | And | Or | Leq | Geq | Eq | Dif | Gt | Lt
 
 type lit =
   Unit | Inf of int | Bool of bool | String of string

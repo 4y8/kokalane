@@ -20,6 +20,7 @@ let upper = ['A'-'Z']
 let other = lower | upper | digit | '-'
 
 rule lexer = parse
+  | [" " "\t" "\n" "\r"] { lexer lexbuf } 
   | "//" [^'\n']* '\n' { Lexing.new_line lexbuf ; lexer lexbuf }
   | "++" { DPLUS }
   | "+" { PLUS }
@@ -31,6 +32,7 @@ rule lexer = parse
   | "||" { OR }
   | "&&" { AND }
   | "." { DOT }
+  | "," { COMMA }
   | ";" { SCOL }
   | ":" { DCOL }
   | "/*" { comment lexbuf }
