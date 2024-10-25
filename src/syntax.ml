@@ -1,6 +1,6 @@
 type op =
     Add | Sub | Mul | Div | Idiv | Mod | And | Or | Leq | Geq | Eq | Dif
-  | Gt | Lt
+  | Gt | Lt | Cat
 [@@deriving show]
 
 type lit =
@@ -11,8 +11,7 @@ type eff = EDiv | EConsole
 [@@deriving show]
 
 type ty =
-    TUnit | TBool | TInt | TString | TList of ty
-  | TMaybe of ty | TFun of ty list * ty * eff list
+    TCon of string | TApp of string * ty | TFun of ty list * ty * string list
 [@@deriving show]
 
 type expr

@@ -11,7 +11,6 @@
 %token LPAR RPAR LCUR RCUR LANG RANG LSQU RSQU
 %token SCOL DOT DCOL COMMA EOF
 %token TRUE FALSE
-%token TUNIT TBOOL TINT TSTRING TLIST TMAYBE
 %start file
 %type <decl list> file
 
@@ -36,8 +35,25 @@ lit:
 ;
 
 atype:
-    TUNIT { TUnit }
-  | TBOOL { TBool }
+    t=IDENT { TCon t }
+  | v=IDENT LANG t=ty RANG { TApp (v, t) }
+  | LPAR t=ty RPAR { t }
+;
+
+result:
+    t=ty { ([], t) }
+;
+
+tlist:
+    { [] }
+  | t=ty { [t] }
+  | t=ty COMMA l=tlist { t :: l }
+;
+
+ty:
+    t=atype { t }
+  | t=atype ARR r=result { let e, t' = r in TFun ([t], t', e) }
+  | LPAR t=tlist RPAR ARR r=result { let e, t' = r in TFun (t, t', e) }
 ;
 
 atom:
@@ -54,12 +70,15 @@ bexpr:
   | x=IDENT WAL e=bexpr { Wal (x, e) }
   | e1=bexpr TIMES e2=bexpr { Bop (e1, Mul, e2) }
   | e1=bexpr PLUS e2=bexpr { Bop (e1, Add, e2) }
+  | e1=bexpr MINUS e2=bexpr { Bop (e1, Sub, e2) }
+  | e1=bexpr DPLUS e2=bexpr { Bop (e1, Cat, e2) }
 ;
 
 (* on crée cette règle pour éviter les conflits shift/reduce *)
 rexpr:
     b=bexpr { b }
   | RETURN e=expr { Ret e }
+  | FN fb=funbody { let arg, body = fb in Fun (arg, None, body) }
 ;
 
 stmt:
@@ -73,8 +92,13 @@ expr:
   | LCUR SCOL* s=stmt* RCUR { Blk s }
 ;
 
+args:
+    { [] }
+  | x=IDENT DCOL t=ty { [x, t] }
+  | x=IDENT DCOL t=ty COMMA l=args { (x, t) :: l }
+
 funbody:
-  LPAR RPAR e=expr { ([], e) }
+  LPAR x=args RPAR e=expr { (x, e) }
 ;
 
 decl:

@@ -7,10 +7,7 @@
   let _ = List.iter (fun (k, v) -> Hashtbl.add ident_tbl k v)
     ["elif", ELIF; "else", ELSE; "fn", FN; "fun", FUN; "if", IF;
      "return", RETURN; "then", THEN; "val", VAL; "var", VAR;
-     "True", TRUE; "False", FALSE;
-     "unit", TUNIT; "bool", TBOOL; "int", TINT; "string", TSTRING; "list", TLIST;
-     "maybe", TMAYBE]
-
+     "True", TRUE; "False", FALSE]
 }
 
 let digit = ['0'-'9']
