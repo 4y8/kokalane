@@ -1,4 +1,4 @@
-fun x() {
+fun f(x : int -> int) {
   println("hello world");
   println("hello world");
   println("hello world");

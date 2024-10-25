@@ -20,12 +20,6 @@
 
 %%
 
-farg:
-    { [] }
-  | e=expr { [e] }
-  | e=expr COMMA l=farg { e :: l }
-;
-
 lit:
     i=INT { LInt i }
   | s=STRING { LString s }
@@ -44,11 +38,14 @@ result:
     t=ty { ([], t) }
 ;
 
-tlist:
-    { [] }
-  | t=ty { [t] }
+tlist_nonempty:
+    t=ty { [t] }
   | t=ty COMMA l=tlist { t :: l }
 ;
+
+(* cette règle ne considère que des listes de 0, 2 ou plus types (i.e. tout sauf
+1) pour éviter des conflits avec le 3ème cas de atype *)
+tlist: { [] } | t = ty COMMA l=tlist_nonempty { t :: l } ;
 
 ty:
     t=atype { t }
@@ -58,11 +55,11 @@ ty:
 
 atom:
     x=IDENT { Var x }
-  | f=atom LPAR l=farg RPAR { App(f, l) }
+  | f=atom LPAR l=separated_list(COMMA, expr) RPAR { App(f, l) }
   | l=lit { Lit l }
   | LPAR e=expr RPAR { e }
   | x=atom DOT f=IDENT { App(Var f, [x]) }
-  | LSQU l=farg RSQU { Lst l }
+  | LSQU l=separated_list(COMMA, expr) RSQU { Lst l }
 ;
 
 bexpr:
@@ -92,13 +89,12 @@ expr:
   | LCUR SCOL* s=stmt* RCUR { Blk s }
 ;
 
-args:
-    { [] }
-  | x=IDENT DCOL t=ty { [x, t] }
-  | x=IDENT DCOL t=ty COMMA l=args { (x, t) :: l }
+arg:
+    x=IDENT DCOL t=ty { x, t }
+;
 
 funbody:
-  LPAR x=args RPAR e=expr { (x, e) }
+  LPAR x=separated_list(COMMA, arg) RPAR e=expr { (x, e) }
 ;
 
 decl:
