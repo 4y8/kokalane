@@ -6,7 +6,10 @@
 
   let _ = List.iter (fun (k, v) -> Hashtbl.add ident_tbl k v)
     ["elif", ELIF; "else", ELSE; "fn", FN; "fun", FUN; "if", IF;
-     "return", RETURN; "then", THEN; "val", VAL; "var", VAR]
+     "return", RETURN; "then", THEN; "val", VAL; "var", VAR;
+     "True", TRUE; "False", FALSE;
+     "unit", TUNIT; "bool", TBOOL; "int", TINT; "string", TSTRING; "list", TLIST;
+     "maybe", TMAYBE]
 
 }
 
@@ -26,6 +29,13 @@ rule lexer = parse
   | "*" { TIMES }
   | "//" { IDIV }
   | ":=" { WAL }
+  | "==" { EQ }
+  | "!=" { DIF }
+  | "=" { ASS }
+  | "<=" { LEQ }
+  | ">=" { GEQ }
+  | "<" { LT }
+  | ">" { GT }
   | "||" { OR }
   | "&&" { AND }
   | "." { DOT }
@@ -36,6 +46,8 @@ rule lexer = parse
   | ")" { RPAR }
   | "{" { LCUR }
   | "}" { RCUR }
+  | "[" { LSQU }
+  | "]" { RSQU }
   | "/*" { comment lexbuf }
   | ('-'? ('0' | ['1'-'9'] digit*)) as s { INT (int_of_string s) }
   | (lower other* '\''*) as s { match Hashtbl.find_opt ident_tbl s with

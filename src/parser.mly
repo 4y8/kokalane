@@ -7,11 +7,18 @@
 %token <int>INT
 %token <string>IDENT
 %token BANG OR AND
-%token PLUS MINUS TIMES DIV MOD IDIV LEQ GEQ EQ DIF ASS WAL ARR DPLUS
-%token LPAR RPAR LCUR RCUR LANG RANG
+%token PLUS MINUS TIMES DIV MOD IDIV LEQ GEQ LT GT EQ DIF ASS WAL ARR DPLUS
+%token LPAR RPAR LCUR RCUR LANG RANG LSQU RSQU
 %token SCOL DOT DCOL COMMA EOF
+%token TRUE FALSE
+%token TUNIT TBOOL TINT TSTRING TLIST TMAYBE
 %start file
 %type <decl list> file
+
+%nonassoc RETURN
+%nonassoc WAL
+%left PLUS DPLUS MINUS
+%left TIMES
 
 %%
 
@@ -22,18 +29,33 @@ farg:
 ;
 
 lit:
-    i=INT { Int i }
-  | s=STRING { String s }
+    i=INT { LInt i }
+  | s=STRING { LString s }
+  | TRUE { LBool true }
+  | FALSE { LBool false }
+  | LPAR RPAR { LUnit }
+;
+
+atype:
+    TUNIT { TUnit }
+  | TBOOL { TBool }
 ;
 
 atom:
     x=IDENT { Var x }
   | f=atom LPAR l=farg RPAR { App(f, l) }
   | l=lit { Lit l }
+  | LPAR e=expr RPAR { e }
+  | x=atom DOT f=IDENT { App(Var f, [x]) }
+  | LSQU l=farg RSQU { Lst l }
 ;
 
 bexpr:
     a=atom { a }
+  | x=IDENT WAL e=bexpr { Wal (x, e) }
+  | RETURN e=expr { Ret e }
+  | e1=bexpr TIMES e2=bexpr { Bop (e1, Mul, e2) }
+  | e1=bexpr PLUS e2=bexpr { Bop (e1, Add, e2) }
 ;
 
 stmt:
