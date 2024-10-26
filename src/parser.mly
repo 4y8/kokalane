@@ -28,9 +28,13 @@ lit:
   | LPAR RPAR { LUnit }
 ;
 
+stringpos:
+     string=IDENT { {string; loc = $startpos, $endpos} }
+;
+
 atype_nonpos:
     t=IDENT { TCon t }
-  | v=IDENT LANG t=ty RANG { TApp (v, t) }
+  | v=stringpos LANG t=ty RANG { TApp (v, t) }
 ;
 
 atype:

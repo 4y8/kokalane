@@ -8,7 +8,7 @@
      "return", RETURN; "then", THEN; "val", VAL; "var", VAR;
      "True", TRUE; "False", FALSE]
 
-  let error = Error.error_lexbuf
+  let error = Error.error_str_lexbuf
 }
 
 let digit = ['0'-'9']
