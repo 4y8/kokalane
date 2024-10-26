@@ -28,9 +28,13 @@ lit:
   | LPAR RPAR { LUnit }
 ;
 
-atype:
+atype_nonpos:
     t=IDENT { TCon t }
   | v=IDENT LANG t=ty RANG { TApp (v, t) }
+;
+
+atype:
+    ty=atype_nonpos { {ty; loc = $startpos, $endpos} }
   | LPAR t=ty RPAR { t }
 ;
 
@@ -45,48 +49,75 @@ tlist_nonempty:
 
 (* cette règle ne considère que des listes de 0, 2 ou plus types (i.e. tout sauf
 1) pour éviter des conflits avec le 3ème cas de atype *)
-tlist: { [] } | t = ty COMMA l=tlist_nonempty { t :: l } ;
+tlist:
+    { [] }
+  | t = ty COMMA l=tlist_nonempty { t :: l }
+;
 
-ty:
-    t=atype { t }
-  | t=atype ARR r=result { let e, t' = r in TFun ([t], t', e) }
+ty_nonpos:
+    t=atype ARR r=result { let e, t' = r in TFun ([t], t', e) }
   | LPAR t=tlist RPAR ARR r=result { let e, t' = r in TFun (t, t', e) }
 ;
 
-atom:
+ty:
+    t=atype { t }
+  | ty=ty_nonpos { {ty; loc = $startpos, $endpos} }
+;
+
+var:
+  v=IDENT { {expr = Var v; loc = $startpos, $endpos} }
+;
+
+atom_nonpos:
     x=IDENT { Var x }
   | f=atom LPAR l=separated_list(COMMA, expr) RPAR { App(f, l) }
   | l=lit { Lit l }
-  | LPAR e=expr RPAR { e }
-  | x=atom DOT f=IDENT { App(Var f, [x]) }
+  | x=atom DOT f=var { App(f, [x]) }
   | LSQU l=separated_list(COMMA, expr) RSQU { Lst l }
 ;
 
-bexpr:
-    a=atom { a }
-  | x=IDENT WAL e=bexpr { Wal (x, e) }
+atom:
+    expr=atom_nonpos { {expr; loc = $startpos, $endpos} }
+  | LPAR e=expr RPAR { e }
+;
+
+bexpr_nonpos:
+    x=IDENT WAL e=bexpr { Wal (x, e) }
   | e1=bexpr TIMES e2=bexpr { Bop (e1, Mul, e2) }
   | e1=bexpr PLUS e2=bexpr { Bop (e1, Add, e2) }
   | e1=bexpr MINUS e2=bexpr { Bop (e1, Sub, e2) }
   | e1=bexpr DPLUS e2=bexpr { Bop (e1, Cat, e2) }
 ;
 
+bexpr:
+    a=atom { a }
+  | e=bexpr_nonpos { {expr=e; loc = $startpos, $endpos} }
+;
+
 (* on crée cette règle pour éviter les conflits shift/reduce *)
-rexpr:
-    b=bexpr { b }
-  | RETURN e=expr { Ret e }
+rexpr_nonpos:
+    RETURN e=expr { Ret e }
   | FN fb=funbody { let arg, body = fb in Fun (arg, None, body) }
 ;
 
-stmt:
+rexpr:
+    b=bexpr { b }
+  | e=rexpr_nonpos { {expr=e; loc = $startpos, $endpos} }
+;
+
+stmt_nonpos:
     e=expr SCOL+ { SExpr e }
   | VAL x=IDENT ASS l=expr SCOL+ { SVal (x, l) }
   | VAR x=IDENT WAL l=expr SCOL+ { SVar (x, l) }
 ;
 
+stmt:
+   stmt=stmt_nonpos { {stmt; loc = $startpos, $endpos} }
+;
+
 expr:
     e=rexpr { e }
-  | LCUR SCOL* s=stmt* RCUR { Blk s }
+  | LCUR SCOL* s=stmt* RCUR { {expr=Blk s; loc = $startpos, $endpos} }
 ;
 
 arg:

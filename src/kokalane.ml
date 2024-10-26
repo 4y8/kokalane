@@ -10,4 +10,4 @@ let _ =
       Error.error lexbuf (Printf.sprintf "Unexpected token: \"%s\""
                             (Lexing.lexeme lexbuf))
   in
-  List.iter (fun d -> print_endline (Syntax.show_decl d)) p
+  ignore p
