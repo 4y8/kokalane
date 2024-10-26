@@ -8,4 +8,4 @@
  (name kokalane)
  (promote (until-clean))
  (preprocess (staged_pps ppx_import ppx_deriving.show))
- (flags ()))
+ (flags (-rectypes)))

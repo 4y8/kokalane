@@ -10,7 +10,7 @@ let _ =
       Parser.file Lexer.lexer lexbuf
     with
       _ ->
-      Error.errorstr_lexbuf lexbuf (Printf.sprintf "Unexpected token: \"%s\""
+      Error.error_str_lexbuf lexbuf (Printf.sprintf "Unexpected token: \"%s\""
                             (Lexing.lexeme lexbuf))
   in
   List.iter (fun d -> print_endline (Syntax.show_decl d)) p

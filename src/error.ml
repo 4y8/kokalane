@@ -9,11 +9,9 @@ let error (bg, nd) msg =
     msg err_formatter;
     exit 1
 
-let str (s : string) = fun fmt -> fprintf fmt "%s" s
-
 let error_str loc s =
   error loc (fun fmt -> fprintf fmt "%s" s)
 
 let error_str_lexbuf lexbuf s =
   error (Lexing.lexeme_start_p lexbuf, Lexing.lexeme_end_p lexbuf)
-    (fun fmt -> fprintf fmt s)
+    (fun fmt -> fprintf fmt "%s" s)

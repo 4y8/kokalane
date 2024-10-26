@@ -12,10 +12,12 @@ type loc = [%import: Lexing.position] [@@deriving show]
 type stringpos = { string : string ; loc : loc * loc }
 [@@deriving show]
 
-type 'a ty  =
-    TCon of string | TApp of stringpos * 'a | TFun of 'a list * 'a * stringpos list
+(* cette paramétrisation permet d'utiliser le même type avec ou sans les
+annotations de position *)
+type ('a, 'b) ty  =
+    TCon of string | TApp of 'b * 'a | TFun of 'a list * 'a * 'b list
 and typos =
-  {ty : typos ty; loc : loc * loc [@printer fun fmt t -> ()]}
+  {ty : (typos, stringpos) ty; loc : loc * loc [@printer fun fmt t -> ()]}
 [@@deriving show]
 
 type 'a expr
