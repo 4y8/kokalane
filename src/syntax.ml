@@ -16,24 +16,25 @@ type stringpos = { string : string ; loc : loc * loc }
 annotations de position *)
 type ('a, 'b) ty  =
     TCon of string | TApp of 'b * 'a | TFun of 'a list * 'a * 'b list
-and typos =
+[@@deriving show]
+
+type typos =
   {ty : (typos, stringpos) ty; loc : loc * loc [@printer fun fmt t -> ()]}
 [@@deriving show]
 
-type 'a expr
+type ('a, 'b) expr
   = If  of 'a * 'a * 'a
   | Bop of 'a * op * 'a
   | Ret of 'a
   | Var of string
   | Lit of lit
   | App of 'a * 'a list
-  | Wal of string * 'a
+  | Wal of 'b * 'a
   | Fun of (string * typos) list * typos option * 'a
   | Blk of stmtpos list
   | Lst of 'a list
 and exprpos =
-  {expr : exprpos expr; loc : loc * loc [@printer fun fmt t -> ()]}
-[@@deriving show]
+  {expr : (exprpos, stringpos) expr; loc : loc * loc [@printer fun fmt t -> ()]}
 
 and stmt
   = SExpr of exprpos

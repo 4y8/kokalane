@@ -86,7 +86,7 @@ atom:
 ;
 
 bexpr_nonpos:
-    x=IDENT WAL e=bexpr { Wal (x, e) }
+    x=stringpos WAL e=bexpr { Wal (x, e) }
   | e1=bexpr TIMES e2=bexpr { Bop (e1, Mul, e2) }
   | e1=bexpr PLUS e2=bexpr { Bop (e1, Add, e2) }
   | e1=bexpr MINUS e2=bexpr { Bop (e1, Sub, e2) }

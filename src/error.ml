@@ -1,4 +1,5 @@
 open Lexing
+open Pprint
 open Format
 
 let error (bg, nd) msg =
@@ -15,3 +16,11 @@ let error_str loc s =
 let error_str_lexbuf lexbuf s =
   error (Lexing.lexeme_start_p lexbuf, Lexing.lexeme_end_p lexbuf)
     (fun fmt -> fprintf fmt "%s" s)
+
+let type_mismatch loc t t' = 
+  error loc (fun fmt -> Format.fprintf fmt "Type mismatch: expected an\
+expression of type %a, got an expression of type %a"
+                          Pprint.fmt_type t Pprint.fmt_type t')
+
+let unknown_var loc x =
+  error_str loc ("Unknown variable: " ^ x)
