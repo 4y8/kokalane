@@ -1,6 +1,5 @@
 {
   open Parser
-  open Error
 
   let ident_tbl = Hashtbl.create 63
 
@@ -8,6 +7,8 @@
     ["elif", ELIF; "else", ELSE; "fn", FN; "fun", FUN; "if", IF;
      "return", RETURN; "then", THEN; "val", VAL; "var", VAR;
      "True", TRUE; "False", FALSE]
+
+  let error = Error.error_lexbuf
 }
 
 let digit = ['0'-'9']

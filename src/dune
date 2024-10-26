@@ -7,5 +7,5 @@
 (executable
  (name kokalane)
  (promote (until-clean))
- (preprocess (pps ppx_deriving.show ppx_deriving.ord))
+ (preprocess (staged_pps ppx_import ppx_deriving.show))
  (flags ()))
