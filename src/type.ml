@@ -63,12 +63,20 @@ let type_of_lit = function
   | LString _ -> TCon "string"
 
 let rec check ctx t {expr; loc} = match expr with
-    Lst l -> (match t with
-                TApp ("list", t) ->
-                 List.map (check ctx t) l |> List.fold_left SSet.union SSet.empty
+    Lst l ->
+     begin match t with
+       TApp ("list", t) ->
+        let l, eff = List.fold_right
+                       (fun (e, eff) (tl, eff') -> e :: tl, SSet.union eff eff')
+                       (List.map (check ctx t) l) ([], SSet.empty) 
+        in
+        {expr = Lst l; ty = t}, eff
       | _ -> Error.error loc (fun fmt -> Format.fprintf fmt "Type mismatch: \
-expected a value of type %a, got a list" Pprint.fmt_type t))
+expected a value of type %a, got a list" Pprint.fmt_type t) end
   | If (e, b1, b2) ->
+     let eff, e = check ctx (TCon "bool") e in
+     let eff1, b1 = check ctx t b1 in
+     let eff2, 
      SSet.(union (check ctx (TCon "bool") e)
              (union (check ctx t b1) (check ctx t b2)))
   | Blk ([{stmt=SExpr e; _}]) ->

@@ -9,7 +9,7 @@ type lit =
 
 type loc = [%import: Lexing.position] [@@deriving show]
 
-type stringpos = { string : string ; loc : loc * loc }
+type string_loc = { string : string ; loc : loc * loc }
 [@@deriving show]
 
 (* cette paramétrisation permet d'utiliser le même type avec ou sans les
@@ -18,9 +18,11 @@ type ('a, 'b) ty  =
     TCon of string | TApp of 'b * 'a | TFun of 'a list * 'a * 'b list
 [@@deriving show]
 
-type typos =
-  {ty : (typos, stringpos) ty; loc : loc * loc [@printer fun fmt t -> ()]}
+type type_loc =
+  {ty : (type_loc, string_loc) ty; loc : loc * loc [@printer fun fmt t -> ()]}
 [@@deriving show]
+
+type pure_type = (('a, string) ty) as 'a
 
 type ('a, 'b) expr
   = If  of 'a * 'a * 'a
@@ -30,19 +32,22 @@ type ('a, 'b) expr
   | Lit of lit
   | App of 'a * 'a list
   | Wal of 'b * 'a
-  | Fun of (string * typos) list * typos option * 'a
+  | Fun of (string * type_loc) list * type_loc option * 'a
   | Blk of stmtpos list
   | Lst of 'a list
-and exprpos =
-  {expr : (exprpos, stringpos) expr; loc : loc * loc [@printer fun fmt t -> ()]}
+and expr_loc =
+  {expr : (expr_loc, string_loc) expr; loc : loc * loc [@printer fun fmt t -> ()]}
 
 and stmt
-  = SExpr of exprpos
-  | SVar of string * exprpos
-  | SVal of string * exprpos
+  = SExpr of expr_loc
+  | SVar of string * expr_loc
+  | SVal of string * expr_loc
 and stmtpos =
   {stmt : stmt; loc : loc * loc [@printer fun fmt t -> ()]}
 [@@deriving show]
 
-type decl = { name : string ; arg : (string * typos) list ; body : exprpos }
+type exprty =
+  {expr : (exprty, string) expr ; ty : pure_type}
+
+type decl = { name : string ; arg : (string * type_loc) list ; body : expr_loc }
 [@@deriving show]
