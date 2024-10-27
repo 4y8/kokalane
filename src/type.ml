@@ -1,9 +1,5 @@
 open Syntax
 
-
-module SMap = Map.Make(String)
-module SSet = Set.Make(String)
-
 type ctx = { var : (pure_type * bool) SMap.t ; ret_type : pure_type }
 
 let valid_types =
@@ -13,13 +9,15 @@ let valid_types =
 let valid_effects =
   ["div"; "console"] |> SSet.of_list
 
-let eqefflist l l' = SSet.equal (SSet.of_list l) (SSet.of_list l')
-
 let rec eqtype t t' = match t, t' with
     TCon s, TCon s' -> s = s'
   | TApp (f, t), TApp (f', t') -> f = f' && eqtype t t'
   | TFun (arg, res, eff), TFun (arg', res', eff') ->
-    List.for_all2 eqtype arg arg' && eqtype res res' && eqefflist eff eff'
+    begin try
+        List.for_all2 eqtype arg arg' && eqtype res res' && SSet.equal eff eff'
+      with
+        Invalid_argument _ -> false
+    end
   | _, _ -> false
 
 let rec erase_type {ty; loc} = match ty with
@@ -100,14 +98,31 @@ expected a value of type %a, got a list" Pprint.fmt_type t) end
         {expr = Blk (SExpr e :: tl); ty}, eff ++ eff'
      | SVal (x, e) ->
         let e, eff = infer ctx e in
-        let tl, eff' = check {ctx with var=SMap.add x (e.ty, false) ctx.var} t tl in
+        let tl, eff' =
+          check {ctx with var=SMap.add x (e.ty, false) ctx.var} t tl
+        in
         let tl, ty = get_tl_blk tl in
         {expr = Blk ((SVal (x, e)) :: tl); ty}, eff ++ eff'
      | SVar (x, e) ->
         let e, eff = infer ctx e in
-        let tl, eff' = check {ctx with var=SMap.add x (e.ty, true) ctx.var} t tl in
+        let tl, eff' =
+          check {ctx with var=SMap.add x (e.ty, true) ctx.var} t tl
+        in
         let tl, ty = get_tl_blk tl in
         {expr = Blk ((SVal (x, e)) :: tl); ty}, eff ++ eff'
+    end
+  | App (f, x) ->
+    let f, eff = infer ctx f in
+    begin match f.ty with
+        TFun (arg, res, eff') ->
+        (try
+           let x, eff'' = List.map2 (check ctx) arg x |> List.split in
+           {expr = App (f, x); ty = res}, List.fold_left (++) (eff ++ eff') eff''
+         with Invalid_argument _ ->
+           Error.error loc (fun fmt -> Format.fprintf fmt "Function expected %d \
+arguments, got %d" (List.length arg) (List.length x)))
+      | _ -> Error.error loc (fun fmt -> Format.fprintf fmt "Exepected a \
+function, got an expression of type %a" Pprint.fmt_type f.ty)
     end
   | _ ->
     let e, eff = infer ctx {expr; loc} in

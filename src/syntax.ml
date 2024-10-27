@@ -12,17 +12,20 @@ type loc = [%import: Lexing.position] [@@deriving show]
 type string_loc = { string : string ; loc : loc * loc }
 [@@deriving show]
 
+module SMap = Map.Make(String)
+module SSet = Set.Make(String)
+
 (* cette paramétrisation permet d'utiliser le même type avec ou sans les
 annotations de position *)
-type ('a, 'b) ty  =
-    TCon of string | TApp of 'b * 'a | TFun of 'a list * 'a * 'b list
+type ('a, 'b, 'c) ty  =
+    TCon of string | TApp of 'b * 'a | TFun of 'a list * 'a * 'c
 [@@deriving show]
 
 type type_loc =
-  {ty : (type_loc, string_loc) ty; loc : loc * loc [@printer fun fmt t -> ()]}
+  {ty : (type_loc, string_loc, string_loc list) ty; loc : loc * loc [@printer fun fmt t -> ()]}
 [@@deriving show]
 
-type pure_type = (('a, string) ty) as 'a
+type pure_type = (('a, string, SSet.t) ty) as 'a
 
 type ('a, 'b, 'c) expr
   = If  of 'a * 'a * 'a
