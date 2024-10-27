@@ -1,7 +1,10 @@
 open Syntax
 
+
 module SMap = Map.Make(String)
 module SSet = Set.Make(String)
+
+type ctx = { var : (pure_type * bool) SMap.t ; ret_type : pure_type }
 
 let valid_types =
   ["int", 0; "bool", 0; "unit", 0; "string", 0; "list", 1; "maybe", 1]
@@ -19,7 +22,7 @@ let rec eqtype t t' = match t, t' with
     List.for_all2 eqtype arg arg' && eqtype res res' && eqefflist eff eff'
   | _, _ -> false
 
-let rec erase_type {ty; _} = match ty with
+let rec erase_type {ty; loc} = match ty with
     TCon s -> TCon s
   | TApp (s, t) -> TApp (s.string, erase_type t)
   | TFun (arg, res, eff) ->
@@ -62,64 +65,76 @@ let type_of_lit = function
   | LUnit -> TCon "unit"
   | LString _ -> TCon "string"
 
+let (++) = SSet.union
+
 let rec check ctx t {expr; loc} = match expr with
     Lst l ->
      begin match t with
        TApp ("list", t) ->
         let l, eff = List.fold_right
-                       (fun (e, eff) (tl, eff') -> e :: tl, SSet.union eff eff')
+                       (fun (e, eff) (tl, eff') -> e :: tl, eff ++ eff')
                        (List.map (check ctx t) l) ([], SSet.empty) 
         in
         {expr = Lst l; ty = t}, eff
       | _ -> Error.error loc (fun fmt -> Format.fprintf fmt "Type mismatch: \
 expected a value of type %a, got a list" Pprint.fmt_type t) end
   | If (e, b1, b2) ->
-     let eff, e = check ctx (TCon "bool") e in
-     let eff1, b1 = check ctx t b1 in
-     let eff2, 
-     SSet.(union (check ctx (TCon "bool") e)
-             (union (check ctx t b1) (check ctx t b2)))
+     let e, eff = check ctx (TCon "bool") e in
+     let b1, eff1 = check ctx t b1 in
+     let b2, eff2 = check ctx t b2 in
+     {expr = If (e, b1, b2); ty = t}, eff ++ eff1 ++ eff2
   | Blk ([{stmt=SExpr e; _}]) ->
-     check ctx t e
+     let e, eff = check ctx t e in
+     {expr = Blk([SExpr e]); ty = t}, eff
   | Blk (hd :: tl) ->
-     let tl = {expr=Blk (tl); loc} in
+     let tl = {expr=Blk tl; loc} in
+     let get_tl_blk {expr; ty} = match expr with
+         Blk l -> l, ty
+       | _ -> failwith "internal error"
+     in
      begin match hd.stmt with
        SExpr e ->
-        let _, eff = infer ctx e in
-        SSet.union eff @@ check ctx t tl
+        let e, eff = infer ctx e in
+        let tl, eff' = check ctx t tl in
+        let tl, ty = get_tl_blk tl in
+        {expr = Blk (SExpr e :: tl); ty}, eff ++ eff'
      | SVal (x, e) ->
-        let t, eff = infer ctx e in
-        check (SMap.add x (t, false) ctx) t tl
+        let e, eff = infer ctx e in
+        let tl, eff' = check {ctx with var=SMap.add x (e.ty, false) ctx.var} t tl in
+        let tl, ty = get_tl_blk tl in
+        {expr = Blk ((SVal (x, e)) :: tl); ty}, eff ++ eff'
      | SVar (x, e) ->
-        let t, eff = infer ctx e in
-        check (SMap.add x (t, true) ctx) t tl
+        let e, eff = infer ctx e in
+        let tl, eff' = check {ctx with var=SMap.add x (e.ty, true) ctx.var} t tl in
+        let tl, ty = get_tl_blk tl in
+        {expr = Blk ((SVal (x, e)) :: tl); ty}, eff ++ eff'
     end
   | _ ->
-    let t', e = infer ctx {expr; loc} in
-    if eqtype t t' then e else
-      Error.type_mismatch loc t t'
+    let e, eff = infer ctx {expr; loc} in
+    if eqtype t e.ty then e, eff else
+      Error.type_mismatch loc t e.ty
 
 and infer ctx {expr; loc} = match expr with
-    Lit l -> type_of_lit l, SSet.empty
-  | Var x -> (match SMap.find_opt x ctx with
-                Some (t, _) -> t, SSet.empty
+    Lit l -> {expr=Lit l; ty =type_of_lit l}, SSet.empty
+  | Var x -> (match SMap.find_opt x ctx.var with
+                Some (t, _) -> {expr=Var x; ty=t}, SSet.empty
               | None -> Error.unknown_var loc x)
   | Ret e -> infer ctx e
   | Wal (x, e) ->
-     begin match SMap.find_opt x.string ctx with
-       None -> Error.unknown_var x.loc x
+     begin match SMap.find_opt x.string ctx.var with
+         None -> Error.unknown_var x.loc x.string
      | Some (_, false) ->
-        Error.error_str loc (Format.sprintf "Variable %s is immutable" x.string)
+       Error.error_str loc (Format.sprintf "Variable %s is immutable" x.string)
      | Some (t, true) ->
-        TCon "unit", check ctx t e
+       let e, eff = check ctx t e in
+       {expr=Wal(x.string, e); ty = TCon "unit"}, eff
      end
-  | Lst [] -> Error.error_str loc "Internal error: can't infer the type of an\
+  | Lst _ -> Error.error_str loc "Internal error: can't infer the type of an\
 empty list" (* fix *)
-  | Lst l ->
-  (*  let rec get_inferable_elt = function
+(*  | Lst l ->
+    let rec get_inferable_elt = function
         [] -> Error.error_str loc "Internal error: list without an inferable"
       | _ -> failwith "todo"
     in
    *)
-    TCon "", SSet.empty
-  | Blk [] -> TCon "unit", SSet.empty
+  | Blk [] -> {expr=Blk[]; ty=TCon "unit"}, SSet.empty

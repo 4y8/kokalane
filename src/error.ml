@@ -1,6 +1,7 @@
 open Lexing
 open Pprint
 open Format
+open Syntax
 
 let error (bg, nd) msg =
     let b = bg.pos_cnum - bg.pos_bol in
@@ -22,5 +23,5 @@ let type_mismatch loc t t' =
 expression of type %a, got an expression of type %a"
                           Pprint.fmt_type t Pprint.fmt_type t')
 
-let unknown_var loc x =
-  error_str loc ("Unknown variable: " ^ x)
+let unknown_var loc var =
+  error_str loc ("Unknown variable: " ^ var)

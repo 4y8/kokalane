@@ -24,7 +24,7 @@ type type_loc =
 
 type pure_type = (('a, string) ty) as 'a
 
-type ('a, 'b) expr
+type ('a, 'b, 'c) expr
   = If  of 'a * 'a * 'a
   | Bop of 'a * op * 'a
   | Ret of 'a
@@ -33,21 +33,23 @@ type ('a, 'b) expr
   | App of 'a * 'a list
   | Wal of 'b * 'a
   | Fun of (string * type_loc) list * type_loc option * 'a
-  | Blk of stmtpos list
+  | Blk of 'c list
   | Lst of 'a list
 and expr_loc =
-  {expr : (expr_loc, string_loc) expr; loc : loc * loc [@printer fun fmt t -> ()]}
+  {expr : (expr_loc, string_loc, stmt_loc) expr; loc : loc * loc [@printer fun fmt t -> ()]}
 
-and stmt
-  = SExpr of expr_loc
-  | SVar of string * expr_loc
-  | SVal of string * expr_loc
-and stmtpos =
-  {stmt : stmt; loc : loc * loc [@printer fun fmt t -> ()]}
+and 'a stmt
+  = SExpr of 'a
+  | SVar of string * 'a
+  | SVal of string * 'a
+and stmt_loc =
+  {stmt : expr_loc stmt; loc : loc * loc [@printer fun fmt t -> ()]}
 [@@deriving show]
 
-type exprty =
-  {expr : (exprty, string) expr ; ty : pure_type}
+type expr_type =
+  {expr : (expr_type, string, stmt_type) expr ; ty : pure_type}
+
+and stmt_type = expr_type stmt
 
 type decl = { name : string ; arg : (string * type_loc) list ; body : expr_loc }
 [@@deriving show]
