@@ -16,7 +16,8 @@ module SMap = Map.Make(String)
 module SSet = Set.Make(String)
 
 (* cette paramétrisation permet d'utiliser le même type avec ou sans les
-annotations de position *)
+   annotations de position : 'a désigne le type des types, 'b celui des
+   constructeurs de type et 'c celui d'un ensemble d'effet *)
 type ('a, 'b, 'c) ty  =
     TCon of string | TApp of 'b * 'a | TFun of 'a list * 'a * 'c
 [@@deriving show]
@@ -27,7 +28,7 @@ type type_loc =
 
 type pure_type = (('a, string, SSet.t) ty) as 'a
 
-type ('a, 'b, 'c) expr
+type ('a, 'b, 'c, 'd) expr
   = If  of 'a * 'a * 'a
   | Bop of 'a * op * 'a
   | Ret of 'a
@@ -35,11 +36,11 @@ type ('a, 'b, 'c) expr
   | Lit of lit
   | App of 'a * 'a list
   | Wal of 'b * 'a
-  | Fun of (string * type_loc) list * type_loc option * 'a
+  | Fun of (string * 'd) list * 'd option * 'a
   | Blk of 'c list
   | Lst of 'a list
 and expr_loc =
-  {expr : (expr_loc, string_loc, stmt_loc) expr; loc : loc * loc [@printer fun fmt t -> ()]}
+  {expr : (expr_loc, string_loc, stmt_loc, type_loc) expr; loc : loc * loc [@printer fun fmt t -> ()]}
 
 and 'a stmt
   = SExpr of 'a
@@ -50,9 +51,13 @@ and stmt_loc =
 [@@deriving show]
 
 type expr_type =
-  {expr : (expr_type, string, stmt_type) expr ; ty : pure_type}
+  {expr : (expr_type, string, stmt_type, pure_type) expr ; ty : pure_type}
 
 and stmt_type = expr_type stmt
 
 type decl = { name : string ; arg : (string * type_loc) list ; body : expr_loc }
 [@@deriving show]
+
+let is_arith_op = function
+    Add | Sub | Mul | Div | Idiv | Mod -> true
+  | _ -> false

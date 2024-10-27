@@ -31,6 +31,27 @@ let check_valid_effect {string; loc} =
   if not SSet.(mem string valid_effects) then
     Error.error_str loc @@ Format.sprintf "Unknown effect: %s" string
 
+let builtin_fun =
+  ["println"; "repeat"; "while"; "default"; "for"; "head"; "tail"]
+  |> SSet.of_list
+
+let is_builtin_fun {expr; loc} = match expr with
+    Var x when SSet.mem x builtin_fun -> x
+  | _ -> ""
+
+let is_printable loc = function
+    TCon "unit" | TCon "bool" | TCon "int" | TCon "string" -> ()
+  | t -> Error.error loc (fun fmt ->
+             Format.fprintf fmt "Tried to print %a which can't be printed"
+               Pprint.fmt_type t)
+
+let is_concatenable loc = function
+    TCon "string" | TApp ("list", _) -> ()
+  | t ->
+     Error.error loc (fun fmt ->
+         Format.fprintf fmt "Tried to concatenate %a which is can't be \
+concatenated" Pprint.fmt_type t)
+
 let rec check_valid_type {ty; loc} = match ty with
     TCon s ->
      begin match SMap.find_opt s valid_types with
@@ -65,7 +86,13 @@ let type_of_lit = function
 
 let (++) = SSet.union
 
-let rec check ctx t {expr; loc} = match expr with
+let rec check ctx t {expr; loc} =
+  let infer_then_check ctx t e =
+    let e, eff = infer ctx e in
+    if eqtype t e.ty then e, eff else
+      Error.type_mismatch loc t e.ty
+  in
+  match expr with
     Lst l ->
      begin match t with
        TApp ("list", t) ->
@@ -111,6 +138,13 @@ expected a value of type %a, got a list" Pprint.fmt_type t) end
         let tl, ty = get_tl_blk tl in
         {expr = Blk ((SVal (x, e)) :: tl); ty}, eff ++ eff'
     end
+  | App (f, x) when is_builtin_fun f <> "" ->
+     let s = is_builtin_fun f in
+     begin match s, x with
+       "println", _ -> infer_then_check ctx t {expr; loc}
+     | _ -> Error.error_str loc (Format.sprintf "Function %s, got the wrong \
+number of arguments" s) (* pourrait être mieux, en signalant le nombre d'arguments attendu *)
+     end
   | App (f, x) ->
     let f, eff = infer ctx f in
     begin match f.ty with
@@ -119,15 +153,13 @@ expected a value of type %a, got a list" Pprint.fmt_type t) end
            let x, eff'' = List.map2 (check ctx) arg x |> List.split in
            {expr = App (f, x); ty = res}, List.fold_left (++) (eff ++ eff') eff''
          with Invalid_argument _ ->
-           Error.error loc (fun fmt -> Format.fprintf fmt "Function expected %d \
-arguments, got %d" (List.length arg) (List.length x)))
+           Error.error_str loc (Format.sprintf "Function expected %d arguments, got \
+%d" (List.length arg) (List.length x)))
       | _ -> Error.error loc (fun fmt -> Format.fprintf fmt "Exepected a \
 function, got an expression of type %a" Pprint.fmt_type f.ty)
     end
   | _ ->
-    let e, eff = infer ctx {expr; loc} in
-    if eqtype t e.ty then e, eff else
-      Error.type_mismatch loc t e.ty
+     infer_then_check ctx t {expr; loc}
 
 and infer ctx {expr; loc} = match expr with
     Lit l -> {expr=Lit l; ty =type_of_lit l}, SSet.empty
@@ -145,11 +177,31 @@ and infer ctx {expr; loc} = match expr with
        {expr=Wal(x.string, e); ty = TCon "unit"}, eff
      end
   | Lst _ -> Error.error_str loc "Internal error: can't infer the type of an\
-empty list" (* fix *)
+empty list" (* fixme *)
+  | App (f, x) when is_builtin_fun f <> "" ->
+     let s = is_builtin_fun f in
+     begin match s, x with
+       "println", [e] ->
+        let e, eff = infer ctx e in
+        is_printable loc e.ty;
+        let pr_type = TFun ([e.ty], TCon "unit", SSet.singleton "console") in
+        {expr=App({expr=Var s; ty = pr_type}, [e]); ty = TCon "unit"},
+        eff ++ SSet.singleton "console"
+     | _ -> Error.error_str loc (Format.sprintf "Function %s, got the wrong \
+number of arguments" s) (* pourrait être mieux, en signalant le nombre d'arguments attendu *)
+     end
 (*  | Lst l ->
     let rec get_inferable_elt = function
         [] -> Error.error_str loc "Internal error: list without an inferable"
       | _ -> failwith "todo"
     in
    *)
+  | Bop (e1, op, e2) when is_arith_op op ->
+     let e1, eff1 = check ctx (TCon "int") e1 in
+     let e2, eff2 = check ctx (TCon "int") e2 in
+     {expr = Bop (e1, op, e2); ty = TCon "int"}, eff1 ++ eff2
+  | Bop (e1, ((And | Or) as op), e2) ->
+     let e1, eff1 = check ctx (TCon "bool") e1 in
+     let e2, eff2 = check ctx (TCon "bool") e2 in
+     {expr = Bop (e1, op, e2); ty = TCon "bool"}, eff1 ++ eff2
   | Blk [] -> {expr=Blk[]; ty=TCon "unit"}, SSet.empty

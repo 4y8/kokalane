@@ -3,6 +3,7 @@ fun f(x : int -> int, y : (int, bool) -> list<string>) {
   println("hello world");
   println("hello world");
   x := 1 +2 * 3;
+  return return x;
   return fn (x : int) {
      return x;
   };
