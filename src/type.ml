@@ -17,18 +17,34 @@ let is_builtin_fun {expr; loc} = match expr with
     Var x when SSet.mem x builtin_fun -> x
   | _ -> ""
 
-let is_printable loc = function
-    TCon "unit" | TCon "bool" | TCon "int" | TCon "string" -> ()
-  | t -> Error.error loc (fun fmt ->
-             Format.fprintf fmt "Tried to print %a which can't be printed"
-               Pprint.fmt_type t)
+let rec check_prop_type loc error pr = function
+    TVar r as t->
+     begin match !r with
+       TVLink t -> check_prop_type loc error pr t
+     | _ -> error t
+     end
+  | t -> if not (pr t) then error t
 
-let is_concatenable loc = function
-    TCon "string" | TApp ("list", _) -> ()
-  | t ->
-     Error.error loc (fun fmt ->
+let check_printable loc =
+  let pr = function
+      TCon "unit" | TCon "bool" | TCon "int" | TCon "string" -> true
+    | _ -> false
+  in
+  let error t =
+    Error.error loc (fun fmt ->
+        Format.fprintf fmt "Tried to print %a which can't be printed"
+          Pprint.fmt_type t)
+  in check_prop_type loc error pr
+
+let rec check_concatenable loc =
+  let pr = function
+      TCon "string" | TApp ("list", _) -> true
+    | _ -> false
+  in
+  let error t = Error.error loc (fun fmt ->
          Format.fprintf fmt "Tried to concatenate %a which is can't be \
 concatenated" Pprint.fmt_type t)
+  in check_prop_type loc error pr
 
 exception Occurs
 
@@ -45,7 +61,7 @@ let rec check_occurs x = function
      | _ -> ()
 
 let rec eqtype t t' = match t, t' with
-    TCon s, TCon s' -> false
+    TCon s, TCon s' -> true
   | TApp (f, t), TApp (f', t') -> f = f' && eqtype t t'
   | TFun (arg, res, eff), TFun (arg', res', eff') ->
     begin try
@@ -59,6 +75,7 @@ let rec eqtype t t' = match t, t' with
      | TVUnbd n ->
         check_occurs n t'; r := TVLink t'; true
      end
+  | _, TVar _ -> eqtype t' t
   | _, _ -> false
 
 let rec erase_type {ty; loc} = match ty with
@@ -136,7 +153,7 @@ let rec infer ctx {expr; loc} = match expr with
      begin match s, x with
        "println", [e] ->
         let e, eff = infer ctx e in
-        is_printable loc e.ty;
+        check_printable loc e.ty;
         let pr_type = TFun ([e.ty], TCon "unit", SSet.singleton "console") in
         {expr=App({expr=Var s; ty = pr_type}, [e]); ty = TCon "unit"},
         eff ++ SSet.singleton "console"
@@ -173,6 +190,11 @@ function, got an expression of type %a" Pprint.fmt_type f.ty)
      let e1, eff1 = check ctx (TCon "bool") e1 in
      let e2, eff2 = check ctx (TCon "bool") e2 in
      {expr = Bop (e1, op, e2); ty = TCon "bool"}, eff1 ++ eff2
+  | Bop (e1, Cat, e2) ->
+     let e1, eff1 = infer ctx e1 in
+     let e2, eff2 = check ctx e1.ty e2 in
+     check_concatenable loc e1.ty;
+     {expr = Bop (e1, Cat, e2); ty = e1.ty}, eff1 ++ eff2
   | Blk [] -> {expr=Blk[]; ty=TCon "unit"}, SSet.empty
   | Blk ([{stmt=SExpr e; _}]) ->
      let e, eff = infer ctx e in
@@ -213,7 +235,10 @@ and check ctx t {expr; loc} =
   let e, eff = infer ctx {expr; loc} in
   try
     if eqtype t e.ty then e, eff else
+      begin
+        print_endline (show_type_pure t); print_endline (show_type_pure e.ty);
       Error.type_mismatch loc t e.ty
+      end
   with
     Occurs ->
     Error.error loc (fun fmt -> Format.fprintf fmt "Occurs check failed between \

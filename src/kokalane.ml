@@ -14,5 +14,6 @@ let _ =
       Error.error_str_lexbuf lexbuf (Printf.sprintf "Unexpected token: \"%s\""
                             (Lexing.lexeme lexbuf))
   in
+  List.iter (fun d -> print_endline (Syntax.show_decl_loc d)) p;
   let pt = List.map check_decl p in
   List.iter (fun d -> print_endline (Syntax.show_decl_type d)) pt
