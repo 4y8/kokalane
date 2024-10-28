@@ -1,5 +1,5 @@
 type op =
-    Add | Sub | Mul | Div | Idiv | Mod | And | Or | Leq | Geq | Eq | Dif
+    Add | Sub | Mul | Div | Mod | And | Or | Leq | Geq | Eq | Dif
   | Gt | Lt | Cat
 [@@deriving show]
 
@@ -18,15 +18,19 @@ module SSet = Set.Make(String)
 (* cette paramétrisation permet d'utiliser le même type avec ou sans les
    annotations de position : 'a désigne le type des types, 'b celui des
    constructeurs de type et 'c celui d'un ensemble d'effet *)
-type ('a, 'b, 'c) ty  =
-    TCon of string | TApp of 'b * 'a | TFun of 'a list * 'a * 'c
+type ('a, 'b, 'c) ty
+  = TCon of string | TApp of 'b * 'a
+  | TFun of 'a list * 'a * 'c | TVar of 'a tvar ref
 [@@deriving show]
+and 'a tvar =
+  TVUnbd of int | TVLink of 'a
 
 type type_loc =
   {ty : (type_loc, string_loc, string_loc list) ty; loc : loc * loc [@printer fun fmt t -> ()]}
 [@@deriving show]
 
-type pure_type = (('a, string, SSet.t) ty) as 'a
+type type_pure = (('a [@printer pp_type_pure], string, SSet.t [@printer fun fmt t -> ()]) ty) as 'a
+[@@deriving show]
 
 type ('a, 'b, 'c, 'd) expr
   = If  of 'a * 'a * 'a
@@ -51,13 +55,22 @@ and stmt_loc =
 [@@deriving show]
 
 type expr_type =
-  {expr : (expr_type, string, stmt_type, pure_type) expr ; ty : pure_type}
+  {expr : (expr_type, string, stmt_type, type_pure) expr ; ty : type_pure}
 
 and stmt_type = expr_type stmt
+[@@deriving show]
 
-type decl = { name : string ; arg : (string * type_loc) list ; body : expr_loc }
+type ('a, 'b, 'c) decl =
+  { name : string ; arg : (string * 'b) list; res : 'c
+  ; body : 'a }
+[@@deriving show]
+
+type decl_loc = (expr_loc, type_loc, type_loc option) decl
+[@@deriving show]
+
+type decl_type = (expr_type, type_pure, type_pure) decl
 [@@deriving show]
 
 let is_arith_op = function
-    Add | Sub | Mul | Div | Idiv | Mod -> true
+    Add | Sub | Mul | Div | Mod -> true
   | _ -> false

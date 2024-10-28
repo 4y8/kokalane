@@ -25,7 +25,6 @@ rule lexer = parse
   | "->" { ARR }
   | "-" { MINUS }
   | "*" { TIMES }
-  | "//" { IDIV }
   | ":=" { WAL }
   | "==" { EQ }
   | "!=" { DIF }

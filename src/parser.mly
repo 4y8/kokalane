@@ -7,16 +7,16 @@
 %token <int>INT
 %token <string>IDENT
 %token BANG OR AND
-%token PLUS MINUS TIMES DIV MOD IDIV LEQ GEQ EQ DIF ASS WAL ARR DPLUS
+%token PLUS MINUS TIMES DIV MOD LEQ GEQ EQ DIF ASS WAL ARR DPLUS
 %token LPAR RPAR LCUR RCUR LANG RANG LSQU RSQU
 %token SCOL DOT DCOL COMMA EOF
 %token TRUE FALSE
 %start file
-%type <decl list> file
+%type <decl_loc list> file
 
 %nonassoc WAL
 %left PLUS DPLUS MINUS
-%left TIMES
+%left TIMES MOD DIV
 
 %%
 
@@ -88,6 +88,8 @@ atom:
 bexpr_nonpos:
     x=stringpos WAL e=bexpr { Wal (x, e) }
   | e1=bexpr TIMES e2=bexpr { Bop (e1, Mul, e2) }
+  | e1=bexpr DIV e2=bexpr { Bop (e1, Div, e2) }
+  | e1=bexpr MOD e2=bexpr { Bop (e1, Mod, e2) }
   | e1=bexpr PLUS e2=bexpr { Bop (e1, Add, e2) }
   | e1=bexpr MINUS e2=bexpr { Bop (e1, Sub, e2) }
   | e1=bexpr DPLUS e2=bexpr { Bop (e1, Cat, e2) }
@@ -133,7 +135,8 @@ funbody:
 ;
 
 decl:
-  FUN name=IDENT fb=funbody SCOL+ { let arg, body = fb in { name ; arg ; body } }
+  FUN name=IDENT fb=funbody SCOL+
+    { let arg, body = fb in { name; arg; body; res = None } }
 ;
 
 file:
