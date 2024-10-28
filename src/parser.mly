@@ -28,13 +28,13 @@ lit:
   | LPAR RPAR { LUnit }
 ;
 
-stringpos:
+string_loc:
      string=IDENT { {string; loc = $startpos, $endpos} }
 ;
 
 atype_nonpos:
     t=IDENT { TCon t }
-  | v=stringpos LANG t=ty RANG { TApp (v, t) }
+  | v=string_loc LANG t=ty RANG { TApp (v, t) }
 ;
 
 atype:
@@ -86,7 +86,7 @@ atom:
 ;
 
 bexpr_nonpos:
-    x=stringpos WAL e=bexpr { Wal (x, e) }
+    x=string_loc WAL e=bexpr { Wal (x, e) }
   | e1=bexpr TIMES e2=bexpr { Bop (e1, Mul, e2) }
   | e1=bexpr DIV e2=bexpr { Bop (e1, Div, e2) }
   | e1=bexpr MOD e2=bexpr { Bop (e1, Mod, e2) }
@@ -127,7 +127,7 @@ expr:
 ;
 
 arg:
-    x=IDENT DCOL t=ty { x, t }
+    x=string_loc DCOL t=ty { x, t }
 ;
 
 funbody:
@@ -135,7 +135,7 @@ funbody:
 ;
 
 decl:
-  FUN name=IDENT fb=funbody SCOL+
+  FUN name=string_loc fb=funbody SCOL+
     { let arg, body = fb in { name; arg; body; res = None } }
 ;
 

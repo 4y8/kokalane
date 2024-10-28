@@ -158,7 +158,8 @@ let rec infer ctx {expr; loc} = match expr with
         {expr=App({expr=Var s; ty = pr_type}, [e]); ty = TCon "unit"},
         eff ++ SSet.singleton "console"
      | _ -> Error.error_str loc (Format.sprintf "Function %s, got the wrong \
-number of arguments" s) (* pourrait être mieux, en signalant le nombre d'arguments attendu *)
+number of arguments" s) (* pourrait être mieux, en signalant le nombre
+                           d'arguments attendu *)
      end
   | App (f, x) ->
      let f, eff = infer ctx f in
@@ -166,10 +167,11 @@ number of arguments" s) (* pourrait être mieux, en signalant le nombre d'argume
        TFun (arg, res, eff') ->
         (try
            let x, eff'' = List.map2 (check ctx) arg x |> List.split in
-           {expr = App (f, x); ty = res}, List.fold_left (++) (eff ++ eff') eff''
+           {expr = App (f, x); ty = res},
+           List.fold_left (++) (eff ++ eff') eff''
          with Invalid_argument _ ->
-           Error.error_str loc (Format.sprintf "Function expected %d arguments, got \
-%d" (List.length arg) (List.length x)))
+           Error.error_str loc (Format.sprintf "Function expected %d \
+arguments, got %d" (List.length arg) (List.length x)))
      | _ -> Error.error loc (fun fmt -> Format.fprintf fmt "Exepected a \
 function, got an expression of type %a" Pprint.fmt_type f.ty)
      end
@@ -231,7 +233,7 @@ function, got an expression of type %a" Pprint.fmt_type f.ty)
      {expr = Ret e; ty = new_tvar ()}, eff
   | _ -> failwith "faut finir l'inférence de type"
 
-and check ctx t {expr; loc} = 
+and check ctx t {expr; loc} =
   let e, eff = infer ctx {expr; loc} in
   try
     if eqtype t e.ty then e, eff else
@@ -241,18 +243,69 @@ and check ctx t {expr; loc} =
       end
   with
     Occurs ->
-    Error.error loc (fun fmt -> Format.fprintf fmt "Occurs check failed between \
-types %a and %a" Pprint.fmt_type t Pprint.fmt_type e.ty)
+    Error.error loc (fun fmt -> Format.fprintf fmt "Occurs check failed \
+between types %a and %a" Pprint.fmt_type t Pprint.fmt_type e.ty)
 
-let check_decl {name; arg; res; body} =
+exception Polymorphism
+
+let rec remove_tvar = function
+    TVar r ->
+     begin match !r with
+       TVLink t -> remove_tvar t
+     | TVUnbd _ -> raise Polymorphism
+     end
+  | TCon s -> TCon s
+  | TApp (s, t) -> TApp (s, remove_tvar t)
+  | TFun (arg, res, eff) ->
+     TFun (List.map remove_tvar arg, remove_tvar res, eff)
+
+let rec remove_tvar_expr {expr; ty} =
+  let remove_tvar_stmt = function
+      SExpr e -> SExpr (remove_tvar_expr e)
+    | SVal (x, e) -> SVal (x, remove_tvar_expr e)
+    | SVar (x, e) -> SVar (x, remove_tvar_expr e)
+  in
+  let expr = match expr with
+      If (e, b1, b2) ->
+       If (remove_tvar_expr e, remove_tvar_expr b1, remove_tvar_expr b2)
+    | Bop (e, op, e') ->
+       Bop (remove_tvar_expr e, op, remove_tvar_expr e')
+    | Ret e ->
+       Ret (remove_tvar_expr e)
+    | Var x -> Var x
+    | Lit l -> Lit l
+    | App (f, x) -> App (remove_tvar_expr f, List.map remove_tvar_expr x)
+    | Wal (x, e) -> Wal (x, remove_tvar_expr e)
+    | Fun (x, t, e) -> Fun (x, remove_tvar t, remove_tvar_expr e)
+    | Blk l -> Blk (List.map remove_tvar_stmt l)
+    | Lst l -> Lst (List.map remove_tvar_expr l)
+  in
+  {expr; ty = remove_tvar ty}
+
+let check_decl var {name; arg; res; body} =
   let ret_type = match res with
       None -> new_tvar ()
     | Some t -> erase_type t
   in
-  let arg = List.map (fun (x, t) -> check_valid_type t; (x, erase_type t)) arg in
+
+    let arg =
+    List.map (fun (x, t) -> check_valid_type t; (x.string, erase_type t)) arg
+  in
   let x, t = List.split arg in
   let var =
-    List.fold_left (fun mp (x, t) -> SMap.add x (t, false) mp) SMap.empty arg
+    SMap.add name.string (TFun (t, ret_type, SSet.singleton "div"), false) var
+  in
+  let var =
+    List.fold_left (fun mp (x, t) -> SMap.add x (t, false) mp) var arg
   in
   let body, eff = check {var; ret_type} ret_type body in
-  { name; arg; body; res = TFun (t, body.ty, eff)  }
+  let ret_type =
+    try
+      remove_tvar ret_type
+    with
+      Polymorphism ->
+      Error.error_str name.loc
+        (Format.sprintf "Function %s has polymporphic type" name.string)
+  in
+  let body = remove_tvar_expr body in
+  { name = name.string; arg; body; res = TFun (t, ret_type, eff) }

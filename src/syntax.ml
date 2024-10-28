@@ -40,11 +40,11 @@ type ('a, 'b, 'c, 'd) expr
   | Lit of lit
   | App of 'a * 'a list
   | Wal of 'b * 'a
-  | Fun of (string * 'd) list * 'd option * 'a
+  | Fun of ('b * 'd) list * 'd * 'a
   | Blk of 'c list
   | Lst of 'a list
 and expr_loc =
-  {expr : (expr_loc, string_loc, stmt_loc, type_loc) expr; loc : loc * loc [@printer fun fmt t -> ()]}
+  {expr : (expr_loc, string_loc, stmt_loc, type_loc option) expr; loc : loc * loc [@printer fun fmt t -> ()]}
 
 and 'a stmt
   = SExpr of 'a
@@ -60,15 +60,15 @@ type expr_type =
 and stmt_type = expr_type stmt
 [@@deriving show]
 
-type ('a, 'b, 'c) decl =
-  { name : string ; arg : (string * 'b) list; res : 'c
+type ('a, 'b, 'c, 'd) decl =
+  { name : 'd ; arg : ('d * 'b) list; res : 'c
   ; body : 'a }
 [@@deriving show]
 
-type decl_loc = (expr_loc, type_loc, type_loc option) decl
+type decl_loc = (expr_loc, type_loc, type_loc option, string_loc) decl
 [@@deriving show]
 
-type decl_type = (expr_type, type_pure, type_pure) decl
+type decl_type = (expr_type, type_pure, type_pure, string) decl
 [@@deriving show]
 
 let is_arith_op = function

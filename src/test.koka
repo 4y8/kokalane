@@ -1,6 +1,6 @@
 fun f(x : int -> int, y : (int, bool) -> list<string>) {
   var x := [1, 2];
-  println(x);
+  println(1+2);
   println("hello world");
   println("hello world");
   println("hello world");
