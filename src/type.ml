@@ -1,4 +1,5 @@
 open Syntax
+open Format
 
 type ctx = { var : (type_pure * bool) SMap.t ; ret_type : type_pure }
 
@@ -42,7 +43,7 @@ let rec check_concatenable loc =
     | _ -> false
   in
   let error t = Error.error loc (fun fmt ->
-         Format.fprintf fmt "Tried to concatenate %a which is can't be \
+         fprintf fmt "Tried to concatenate %a which is can't be \
 concatenated" Pprint.fmt_type t)
   in check_prop_type loc error pr
 
@@ -96,17 +97,17 @@ let new_tvar () =
 
 let check_valid_effect {string; loc} =
   if not SSet.(mem string valid_effects) then
-    Error.error_str loc @@ Format.sprintf "Unknown effect: %s" string
+    Error.error_str loc @@ sprintf "Unknown effect: %s" string
 
 let rec check_valid_type {ty; loc} = match ty with
     TCon s ->
      begin match SMap.find_opt s valid_types with
        Some 0 -> ()
      | None ->
-        Error.error_str loc @@ Printf.sprintf "Unknown type constructor: %s" s
+        Error.error_str loc @@ sprintf "Unknown type constructor: %s" s
      | Some n ->
         Error.error_str loc @@
-          Format.sprintf "Type constructor %s expected %d constructors, got 0"
+          sprintf "Type constructor %s expected %d constructors, got 0"
             s n
      end
   | TApp ({string; loc}, t) ->
@@ -114,10 +115,10 @@ let rec check_valid_type {ty; loc} = match ty with
        Some 1 -> check_valid_type t
      | None ->
         Error.error_str loc @@
-          Format.sprintf "Unknown type constructor: %s" string
+          sprintf "Unknown type constructor: %s" string
      | Some n ->
         Error.error_str loc @@
-          Format.sprintf "Type constructor %s expected %d constructors, got 1"
+          sprintf "Type constructor %s expected %d constructors, got 1"
             string n
      end
   | TFun (l, t, e) ->
@@ -143,7 +144,7 @@ let rec infer ctx {expr; loc} = match expr with
      begin match SMap.find_opt x.string ctx.var with
          None -> Error.unknown_var x.loc x.string
      | Some (_, false) ->
-       Error.error_str loc (Format.sprintf "Variable %s is immutable" x.string)
+       Error.error_str loc (sprintf "Variable %s is immutable" x.string)
      | Some (t, true) ->
        let e, eff = check ctx t e in
        {expr=Wal(x.string, e); ty = TCon "unit"}, eff
@@ -157,7 +158,7 @@ let rec infer ctx {expr; loc} = match expr with
         let pr_type = TFun ([e.ty], TCon "unit", SSet.singleton "console") in
         {expr=App({expr=Var s; ty = pr_type}, [e]); ty = TCon "unit"},
         eff ++ SSet.singleton "console"
-     | _ -> Error.error_str loc (Format.sprintf "Function %s, got the wrong \
+     | _ -> Error.error_str loc (sprintf "Function %s, got the wrong \
 number of arguments" s) (* pourrait être mieux, en signalant le nombre
                            d'arguments attendu *)
      end
@@ -170,9 +171,9 @@ number of arguments" s) (* pourrait être mieux, en signalant le nombre
            {expr = App (f, x); ty = res},
            List.fold_left (++) (eff ++ eff') eff''
          with Invalid_argument _ ->
-           Error.error_str loc (Format.sprintf "Function expected %d \
+           Error.error_str loc (sprintf "Function expected %d \
 arguments, got %d" (List.length arg) (List.length x)))
-     | _ -> Error.error loc (fun fmt -> Format.fprintf fmt "Exepected a \
+     | _ -> Error.error loc (fun fmt -> fprintf fmt "Exepected a \
 function, got an expression of type %a" Pprint.fmt_type f.ty)
      end
   | Lst l ->
@@ -243,7 +244,7 @@ and check ctx t {expr; loc} =
       end
   with
     Occurs ->
-    Error.error loc (fun fmt -> Format.fprintf fmt "Occurs check failed \
+    Error.error loc (fun fmt -> fprintf fmt "Occurs check failed \
 between types %a and %a" Pprint.fmt_type t Pprint.fmt_type e.ty)
 
 exception Polymorphism
@@ -288,15 +289,22 @@ let check_decl var {name; arg; res; body} =
     | Some t -> erase_type t
   in
 
-    let arg =
-    List.map (fun (x, t) -> check_valid_type t; (x.string, erase_type t)) arg
+  let arg =
+    List.map (fun (x, t) -> check_valid_type t; (x, erase_type t)) arg
   in
   let x, t = List.split arg in
   let var =
     SMap.add name.string (TFun (t, ret_type, SSet.singleton "div"), false) var
   in
+  let add_var mp (x, t) =
+    if SMap.mem x.string mp then
+      Error.error_str x.loc (sprintf "Argument %s of %s defined twice" x.string
+                               name.string)
+    else
+      SMap.add x.string (t, false) mp
+  in
   let var =
-    List.fold_left (fun mp (x, t) -> SMap.add x (t, false) mp) var arg
+    List.fold_left add_var var arg
   in
   let body, eff = check {var; ret_type} ret_type body in
   let ret_type =
@@ -305,7 +313,38 @@ let check_decl var {name; arg; res; body} =
     with
       Polymorphism ->
       Error.error_str name.loc
-        (Format.sprintf "Function %s has polymporphic type" name.string)
+        (sprintf "Function %s has polymporphic type" name.string)
   in
   let body = remove_tvar_expr body in
-  { name = name.string; arg; body; res = TFun (t, ret_type, eff) }
+  let arg = List.map (fun (x, t) -> (x.string, t)) arg in
+  {name = name.string; arg; body; res = TFun (t, ret_type, eff)}
+
+exception NoMain
+
+let check_file =
+  let add_function mp (x, t) =
+    if SMap.mem x.string mp then
+      Error.error_str x.loc (sprintf "Function %s defined twice" x.string)
+    else
+      SMap.add x.string (t, false) mp
+  in
+  let rec check_file main var = function
+    | hd :: tl ->
+      let d = check_decl var hd in
+      let main =
+        if d.name = "main" then
+          if d.arg = [] then
+            Some d
+          else
+            Error.error_str hd.name.loc "Function name takes no argument"
+        else main
+      in
+      let var = add_function var (hd.name, d.res) in
+      let l, main = check_file main var tl in
+      d :: l, main
+    | [] ->
+      match main with
+        None -> raise NoMain
+      | Some main -> [], main
+  in
+  check_file None SMap.empty

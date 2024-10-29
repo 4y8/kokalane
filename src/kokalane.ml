@@ -15,5 +15,10 @@ let _ =
                             (Lexing.lexeme lexbuf))
   in
   List.iter (fun d -> print_endline (Syntax.show_decl_loc d)) p;
-  let pt = List.map check_decl p in
+  let pt, main =
+    try
+      check_file p
+    with
+      NoMain -> Error.error_str_lexbuf lexbuf "Missing main function"
+  in
   List.iter (fun d -> print_endline (Syntax.show_decl_type d)) pt
