@@ -15,15 +15,17 @@ type string_loc = { string : string ; loc : loc * loc }
 module SMap = Map.Make(String)
 module SSet = Set.Make(String)
 
-module rec Effect : sig
-  type t = EDiv | EConsole | EHole of ESet.t ref
+module Effect : sig
+  type t = EDiv | EConsole
   val compare : t -> t -> int
 end = struct
-  type t = EDiv | EConsole | EHole of ESet.t ref
+  type t = EDiv | EConsole
   let compare = compare
 end
-and ESet : Set.S with type elt = Effect.t = Set.Make(Effect)
+module ESet = Set.Make(Effect)
+module EMap = Map.Make(Effect)
 
+type constr = bool option ref list EMap.t
 
 (* cette paramétrisation permet d'utiliser le même type avec ou sans les
    annotations de position : 'a désigne le type des types, 'b celui des
@@ -39,10 +41,10 @@ type type_loc =
   {ty : (type_loc, string_loc, string_loc list) ty; loc : loc * loc [@printer fun fmt t -> ()]}
 [@@deriving show]
 
-type type_pure = (('a [@printer pp_type_pure], string, SSet.t [@printer fun fmt t -> ()]) ty) as 'a
+type type_pure = (('a [@printer pp_type_pure], string, ESet.t * constr [@printer fun fmt t -> ()]) ty) as 'a
 [@@deriving show]
 
-type ('a, 'b, 'c, 'd, 'e) expr
+type ('a, 'b, 'c, 'd) expr
   = If  of 'a * 'a * 'a
   | Bop of 'a * op * 'a
   | Ret of 'a
@@ -50,11 +52,11 @@ type ('a, 'b, 'c, 'd, 'e) expr
   | Lit of lit
   | App of 'a * 'a list
   | Wal of 'b * 'a
-  | Fun of ('b * 'd) list * 'e * 'a
+  | Fun of ('b * 'd) list * 'd option * 'a
   | Blk of 'c list
   | Lst of 'a list
 and expr_loc =
-  {expr : (expr_loc, string_loc, stmt_loc, type_loc, type_loc option) expr; loc : loc * loc [@printer fun fmt t -> ()]}
+  {expr : (expr_loc, string_loc, stmt_loc, type_loc) expr; loc : loc * loc [@printer fun fmt t -> ()]}
 
 and 'a stmt
   = SExpr of 'a
@@ -65,7 +67,7 @@ and stmt_loc =
 [@@deriving show]
 
 type expr_type =
-  {expr : (expr_type, string, stmt_type, type_pure, type_pure) expr ; ty : type_pure}
+  {expr : (expr_type, string, stmt_type, type_pure) expr ; ty : type_pure}
 
 and stmt_type = expr_type stmt
 [@@deriving show]

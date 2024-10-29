@@ -1,4 +1,5 @@
 open Syntax
+open Syntax.Effect
 open Format
 
 type ctx = { var : (type_pure * bool) SMap.t ; ret_type : type_pure }
@@ -7,8 +8,10 @@ let valid_types =
   ["int", 0; "bool", 0; "unit", 0; "string", 0; "list", 1; "maybe", 1]
   |> List.to_seq |> SMap.of_seq
 
+let valid_effects_list = ["div", EDiv; "console", EConsole]
+
 let valid_effects =
-  ["div"; "console"] |> SSet.of_list
+  valid_effects_list |> List.to_seq |> SMap.of_seq
 
 let builtin_fun =
   ["println"; "repeat"; "while"; "default"; "for"; "head"; "tail"]
@@ -61,12 +64,33 @@ let rec check_occurs x = function
      | TVUnbd n when n = x -> raise Occurs
      | _ -> ()
 
+let empty_constr =
+  List.map (fun (_, e) -> (e, [])) valid_effects_list
+  |> List.to_seq |> EMap.of_seq
+
+let (++) (eff, constr) (eff', constr') =
+  let get_constr (_, e) =
+    e, EMap.find e constr @ EMap.find e constr'
+  in
+  ESet.union eff eff',
+  List.map get_constr valid_effects_list |> List.to_seq |> EMap.of_seq
+
+let add_effect (eff, constr) e =
+  (ESet.add e eff, constr)
+
+let add_constr (eff, constr) e r =
+  let c = EMap.find e constr in
+  (eff, EMap.add e (r :: c) constr)
+
+let unify_effset e e' = ()
+
 let rec eqtype t t' = match t, t' with
     TCon s, TCon s' -> true
   | TApp (f, t), TApp (f', t') -> f = f' && eqtype t t'
   | TFun (arg, res, eff), TFun (arg', res', eff') ->
     begin try
-        List.for_all2 eqtype arg arg' && eqtype res res' && SSet.equal eff eff'
+        unify_effset eff eff';
+        List.for_all2 eqtype arg arg' && eqtype res res'
       with
         Invalid_argument _ -> false
     end
@@ -84,7 +108,8 @@ let rec erase_type {ty; loc} = match ty with
   | TApp (s, t) -> TApp (s.string, erase_type t)
   | TFun (arg, res, eff) ->
      TFun (List.map erase_type arg, erase_type res,
-           List.map (fun s -> s.string) eff |> SSet.of_list)
+           (List.map (fun s -> SMap.find s.string valid_effects) eff
+           |> ESet.of_list, empty_constr))
   | TVar r ->
      match !r with
        TVLink ty -> TVar (ref (TVLink (erase_type ty)))
@@ -96,7 +121,7 @@ let new_tvar () =
   incr tvar; TVar (ref (TVUnbd !tvar))
 
 let check_valid_effect {string; loc} =
-  if not SSet.(mem string valid_effects) then
+  if not SMap.(mem string valid_effects) then
     Error.error_str loc @@ sprintf "Unknown effect: %s" string
 
 let rec check_valid_type {ty; loc} = match ty with
@@ -133,21 +158,21 @@ let type_of_lit = function
   | LUnit -> TCon "unit"
   | LString _ -> TCon "string"
 
-let (++) = SSet.union
-
 let rec infer ctx {expr; loc} = match expr with
-    Lit l -> {expr=Lit l; ty =type_of_lit l}, SSet.empty
-  | Var x -> (match SMap.find_opt x ctx.var with
-                Some (t, _) -> {expr=Var x; ty=t}, SSet.empty
-              | None -> Error.unknown_var loc x)
+    Lit l -> {expr=Lit l; ty =type_of_lit l}, (ESet.empty, empty_constr)
+  | Var x ->
+    begin match SMap.find_opt x ctx.var with
+        Some (t, _) -> {expr=Var x; ty=t}, (ESet.empty, empty_constr)
+      | None -> Error.unknown_var loc x
+    end
   | Wal (x, e) ->
      begin match SMap.find_opt x.string ctx.var with
          None -> Error.unknown_var x.loc x.string
-     | Some (_, false) ->
-       Error.error_str loc (sprintf "Variable %s is immutable" x.string)
-     | Some (t, true) ->
-       let e, eff = check ctx t e in
-       {expr=Wal(x.string, e); ty = TCon "unit"}, eff
+       | Some (_, false) ->
+         Error.error_str loc (sprintf "Variable %s is immutable" x.string)
+       | Some (t, true) ->
+         let e, eff = check ctx t e in
+         {expr=Wal(x.string, e); ty = TCon "unit"}, eff
      end
   | App (f, x) when is_builtin_fun f <> "" ->
      let s = is_builtin_fun f in
@@ -155,9 +180,9 @@ let rec infer ctx {expr; loc} = match expr with
        "println", [e] ->
         let e, eff = infer ctx e in
         check_printable loc e.ty;
-        let pr_type = TFun ([e.ty], TCon "unit", SSet.singleton "console") in
+        let pr_type = TFun ([e.ty], TCon "unit", (ESet.singleton EConsole, empty_constr)) in
         {expr=App({expr=Var s; ty = pr_type}, [e]); ty = TCon "unit"},
-        eff ++ SSet.singleton "console"
+        add_effect eff EConsole
      | _ -> Error.error_str loc (sprintf "Function %s, got the wrong \
 number of arguments" s) (* pourrait être mieux, en signalant le nombre
                            d'arguments attendu *)
@@ -179,7 +204,7 @@ function, got an expression of type %a" Pprint.fmt_type f.ty)
   | Lst l ->
      let ty = new_tvar () in
      let l, eff = List.split (List.map (check ctx ty) l) in
-     {expr = Lst l; ty = TApp ("list", ty)}, List.fold_left (++) SSet.empty eff
+     {expr = Lst l; ty = TApp ("list", ty)}, List.fold_left (++) (ESet.empty, empty_constr) eff
   | If (e, b1, b2) ->
      let e, eff = check ctx (TCon "bool") e in
      let b1, eff1 = infer ctx b1 in
@@ -198,7 +223,7 @@ function, got an expression of type %a" Pprint.fmt_type f.ty)
      let e2, eff2 = check ctx e1.ty e2 in
      check_concatenable loc e1.ty;
      {expr = Bop (e1, Cat, e2); ty = e1.ty}, eff1 ++ eff2
-  | Blk [] -> {expr=Blk[]; ty=TCon "unit"}, SSet.empty
+  | Blk [] -> {expr=Blk[]; ty=TCon "unit"}, (ESet.empty, empty_constr)
   | Blk ([{stmt=SExpr e; _}]) ->
      let e, eff = infer ctx e in
      {expr = Blk([SExpr e]); ty = e.ty}, eff
@@ -238,10 +263,7 @@ and check ctx t {expr; loc} =
   let e, eff = infer ctx {expr; loc} in
   try
     if eqtype t e.ty then e, eff else
-      begin
-        print_endline (show_type_pure t); print_endline (show_type_pure e.ty);
       Error.type_mismatch loc t e.ty
-      end
   with
     Occurs ->
     Error.error loc (fun fmt -> fprintf fmt "Occurs check failed \
@@ -277,7 +299,8 @@ let rec remove_tvar_expr {expr; ty} =
     | Lit l -> Lit l
     | App (f, x) -> App (remove_tvar_expr f, List.map remove_tvar_expr x)
     | Wal (x, e) -> Wal (x, remove_tvar_expr e)
-    | Fun (x, t, e) -> Fun (x, remove_tvar t, remove_tvar_expr e)
+    | Fun (x, Some t, e) -> Fun (x, Some (remove_tvar t), remove_tvar_expr e)
+    | Fun (x, None, e) -> Fun (x, None, remove_tvar_expr e)
     | Blk l -> Blk (List.map remove_tvar_stmt l)
     | Lst l -> Lst (List.map remove_tvar_expr l)
   in
@@ -293,8 +316,11 @@ let check_decl var {name; arg; res; body} =
     List.map (fun (x, t) -> check_valid_type t; (x, erase_type t)) arg
   in
   let x, t = List.split arg in
+  let has_console = ref None in
+  let eff = ESet.singleton EDiv, empty_constr in
+  let eff = add_constr eff EConsole has_console in
   let var =
-    SMap.add name.string (TFun (t, ret_type, SSet.singleton "div"), false) var
+    SMap.add name.string (TFun (t, ret_type, eff), false) var
   in
   let add_var mp (x, t) =
     if SMap.mem x.string mp then
