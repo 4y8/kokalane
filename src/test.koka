@@ -1,9 +1,11 @@
-fun f(x : int -> int, y : (int, bool) -> list<string>) {
-  var x := [1, 2];
-  println(1+2);
-  println("hello world");
-  println("hello world");
-  println("hello world");
+fun g(x : int -> <div, console> int) {
+  return 1;
+};
+
+fun f(x : int) {
+    g(f);
+    println(1);
+    return 1;
 };
 
 fun main() {

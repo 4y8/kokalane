@@ -25,8 +25,6 @@ end
 module ESet = Set.Make(Effect)
 module EMap = Map.Make(Effect)
 
-type constr = bool option ref list EMap.t
-
 (* cette paramétrisation permet d'utiliser le même type avec ou sans les
    annotations de position : 'a désigne le type des types, 'b celui des
    constructeurs de type et 'c celui d'un ensemble d'effet *)
@@ -41,7 +39,7 @@ type type_loc =
   {ty : (type_loc, string_loc, string_loc list) ty; loc : loc * loc [@printer fun fmt t -> ()]}
 [@@deriving show]
 
-type type_pure = (('a [@printer pp_type_pure], string, ESet.t * constr [@printer fun fmt t -> ()]) ty) as 'a
+type type_pure = (('a [@printer pp_type_pure], string, ESet.t * bool option ref option [@printer fun fmt t -> ()]) ty) as 'a
 [@@deriving show]
 
 type ('a, 'b, 'c, 'd) expr

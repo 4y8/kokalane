@@ -44,6 +44,7 @@ atype:
 
 result:
     t=ty { ([], t) }
+  | LANG l=separated_list(COMMA, string_loc) RANG t=ty { (l, t) } 
 ;
 
 tlist_nonempty:

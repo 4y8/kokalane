@@ -2,7 +2,9 @@ open Syntax
 open Syntax.Effect
 open Format
 
-type ctx = { var : (type_pure * bool) SMap.t ; ret_type : type_pure }
+type ctx =
+  { var : (type_pure * bool) SMap.t; ret_type : type_pure; rec_fun : string
+  ; rec_eff : bool EMap.t }
 
 let valid_types =
   ["int", 0; "bool", 0; "unit", 0; "string", 0; "list", 1; "maybe", 1]
@@ -51,6 +53,7 @@ concatenated" Pprint.fmt_type t)
   in check_prop_type loc error pr
 
 exception Occurs
+exception EffectUnification
 
 let rec check_occurs x = function
     TCon _ -> ()
@@ -64,26 +67,44 @@ let rec check_occurs x = function
      | TVUnbd n when n = x -> raise Occurs
      | _ -> ()
 
-let empty_constr =
-  List.map (fun (_, e) -> (e, [])) valid_effects_list
-  |> List.to_seq |> EMap.of_seq
-
 let (++) (eff, constr) (eff', constr') =
-  let get_constr (_, e) =
-    e, EMap.find e constr @ EMap.find e constr'
-  in
-  ESet.union eff eff',
-  List.map get_constr valid_effects_list |> List.to_seq |> EMap.of_seq
+  ESet.union eff eff', if constr = None then constr' else constr
 
 let add_effect (eff, constr) e =
-  (ESet.add e eff, constr)
+  ESet.add e eff, constr
 
-let add_constr (eff, constr) e r =
-  let c = EMap.find e constr in
-  (eff, EMap.add e (r :: c) constr)
-
-let unify_effset e e' = ()
-
+let unify_effset ((eff, constr) as e) ((eff', constr') as e') =
+  if ESet.mem EDiv eff && not ESet.(mem EDiv eff') || ESet.mem EDiv eff' && not ESet.(mem EDiv eff) then
+    raise EffectUnification
+  else
+    let has_console (eff, constr) =
+     ESet.mem EConsole eff || match constr with
+        None -> false
+      | Some r -> match !r with
+                    None -> false
+                  | Some b -> b
+    in
+    let unify_console (eff, constr) (eff', constr') =
+      if has_console (eff, constr) && not ESet.(mem EConsole eff') then
+        begin match constr' with
+          None -> raise EffectUnification
+        | Some r ->
+           match !r with
+             Some false -> raise EffectUnification
+           | _ -> r := Some true
+        end;
+      if not ESet.(mem EConsole eff') then
+        match constr with
+          None -> ()
+        | Some r ->
+           match !r with
+             Some true -> raise EffectUnification
+           | _ -> r := Some false
+    in
+    unify_console e e';
+    unify_console e' e
+                                      
+  
 let rec eqtype t t' = match t, t' with
     TCon s, TCon s' -> true
   | TApp (f, t), TApp (f', t') -> f = f' && eqtype t t'
@@ -109,7 +130,7 @@ let rec erase_type {ty; loc} = match ty with
   | TFun (arg, res, eff) ->
      TFun (List.map erase_type arg, erase_type res,
            (List.map (fun s -> SMap.find s.string valid_effects) eff
-           |> ESet.of_list, empty_constr))
+           |> ESet.of_list, None))
   | TVar r ->
      match !r with
        TVLink ty -> TVar (ref (TVLink (erase_type ty)))
@@ -159,10 +180,10 @@ let type_of_lit = function
   | LString _ -> TCon "string"
 
 let rec infer ctx {expr; loc} = match expr with
-    Lit l -> {expr=Lit l; ty =type_of_lit l}, (ESet.empty, empty_constr)
+    Lit l -> {expr=Lit l; ty =type_of_lit l}, (ESet.empty, None)
   | Var x ->
     begin match SMap.find_opt x ctx.var with
-        Some (t, _) -> {expr=Var x; ty=t}, (ESet.empty, empty_constr)
+        Some (t, _) -> {expr=Var x; ty=t}, (ESet.empty, None)
       | None -> Error.unknown_var loc x
     end
   | Wal (x, e) ->
@@ -180,7 +201,7 @@ let rec infer ctx {expr; loc} = match expr with
        "println", [e] ->
         let e, eff = infer ctx e in
         check_printable loc e.ty;
-        let pr_type = TFun ([e.ty], TCon "unit", (ESet.singleton EConsole, empty_constr)) in
+        let pr_type = TFun ([e.ty], TCon "unit", (ESet.singleton EConsole, None)) in
         {expr=App({expr=Var s; ty = pr_type}, [e]); ty = TCon "unit"},
         add_effect eff EConsole
      | _ -> Error.error_str loc (sprintf "Function %s, got the wrong \
@@ -204,7 +225,7 @@ function, got an expression of type %a" Pprint.fmt_type f.ty)
   | Lst l ->
      let ty = new_tvar () in
      let l, eff = List.split (List.map (check ctx ty) l) in
-     {expr = Lst l; ty = TApp ("list", ty)}, List.fold_left (++) (ESet.empty, empty_constr) eff
+     {expr = Lst l; ty = TApp ("list", ty)}, List.fold_left (++) (ESet.empty, None) eff
   | If (e, b1, b2) ->
      let e, eff = check ctx (TCon "bool") e in
      let b1, eff1 = infer ctx b1 in
@@ -223,7 +244,7 @@ function, got an expression of type %a" Pprint.fmt_type f.ty)
      let e2, eff2 = check ctx e1.ty e2 in
      check_concatenable loc e1.ty;
      {expr = Bop (e1, Cat, e2); ty = e1.ty}, eff1 ++ eff2
-  | Blk [] -> {expr=Blk[]; ty=TCon "unit"}, (ESet.empty, empty_constr)
+  | Blk [] -> {expr=Blk[]; ty=TCon "unit"}, (ESet.empty, None)
   | Blk ([{stmt=SExpr e; _}]) ->
      let e, eff = infer ctx e in
      {expr = Blk([SExpr e]); ty = e.ty}, eff
@@ -317,8 +338,7 @@ let check_decl var {name; arg; res; body} =
   in
   let x, t = List.split arg in
   let has_console = ref None in
-  let eff = ESet.singleton EDiv, empty_constr in
-  let eff = add_constr eff EConsole has_console in
+  let eff = ESet.singleton EDiv, Some has_console in
   let var =
     SMap.add name.string (TFun (t, ret_type, eff), false) var
   in
@@ -332,7 +352,7 @@ let check_decl var {name; arg; res; body} =
   let var =
     List.fold_left add_var var arg
   in
-  let body, eff = check {var; ret_type} ret_type body in
+  let body, eff = check {var; ret_type; rec_fun = name.string; rec_eff = EMap.empty} ret_type body in
   let ret_type =
     try
       remove_tvar ret_type
@@ -340,6 +360,14 @@ let check_decl var {name; arg; res; body} =
       Polymorphism ->
       Error.error_str name.loc
         (sprintf "Function %s has polymporphic type" name.string)
+  in
+  let eff =
+    if !has_console = None then eff
+    else if !has_console = Some false then
+      if ESet.mem EConsole (fst eff) then
+        raise EffectUnification
+      else eff
+    else add_effect eff EConsole
   in
   let body = remove_tvar_expr body in
   let arg = List.map (fun (x, t) -> (x.string, t)) arg in
