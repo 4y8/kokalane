@@ -16,16 +16,6 @@
 %start file
 %type <decl_loc list> file
 
-%nonassoc THEN
-%nonassoc ELSE
-%nonassoc WAL
-%left OR
-%left AND
-%nonassoc EQ DIF
-%left PLUS DPLUS MINUS
-%left TIMES MOD DIV
-%left FN
-
 %%
 
 lit:
@@ -40,13 +30,13 @@ string_loc:
      string=IDENT { {string; loc = $startpos, $endpos} }
 ;
 
-atype_nonpos:
+atype_noloc:
     t=IDENT { TCon t }
   | v=string_loc LANG t=ty RANG { TApp (v, t) }
 ;
 
 atype:
-    ty=atype_nonpos { {ty; loc = $startpos, $endpos} }
+    ty=atype_noloc { {ty; loc = $startpos, $endpos} }
   | LPAR t=ty RPAR { t }
 ;
 
@@ -55,117 +45,71 @@ result:
   | LANG l=separated_list(COMMA, string_loc) RANG t=ty { (l, t) } 
 ;
 
-tlist_nonempty:
-    t=ty { [t] }
-  | t=ty COMMA l=tlist { t :: l }
-;
-
 (* cette règle ne considère que des listes de 0, 2 ou plus types (i.e. tout sauf
 1) pour éviter des conflits avec le 3ème cas de atype *)
 tlist:
-    { [] }
-  | t = ty COMMA l=tlist_nonempty { t :: l }
+   { [] }
+  | t=ty COMMA l=separated_nonempty_list(COMMA, ty) { t :: l }
 ;
 
-ty_nonpos:
+ty_noloc:
     t=atype ARR r=result { let e, t' = r in TFun ([t], t', e) }
   | LPAR t=tlist RPAR ARR r=result { let e, t' = r in TFun (t, t', e) }
 ;
 
 ty:
     t=atype { t }
-  | ty=ty_nonpos { {ty; loc = $startpos, $endpos} }
+  | ty=ty_noloc { {ty; loc = $startpos, $endpos} }
 ;
 
 var:
   v=IDENT { {expr = Var v; loc = $startpos, $endpos} }
 ;
 
-atom_nonpos:
-    x=IDENT { Var x }
-  | f=atom LPAR l=separated_list(COMMA, expr) RPAR { App(f, l) }
-  | l=lit { Lit l }
+atom_noloc:
+    l=lit { Lit l }
   | x=atom DOT f=var { App(f, [x]) }
-  | LSQU l=separated_list(COMMA, expr) RSQU { Lst l }
-(* l'annotation de type permet de résoudre une ambigüité *)
 ;
 
 atom:
-    expr=atom_nonpos { {expr; loc = $startpos, $endpos} }
+    expr=atom_noloc { {expr; loc = $startpos, $endpos} }
   | LPAR e=expr RPAR { e }
+  | e=var { e }
 ;
 
-trailing_fn_noloc :
-    a=atom_fn FN f=fn { let a : expr_loc = a in add_app a f }
+mul_expr_noloc:
+    e1=mul_expr TIMES e2=atom { Bop (e1, Mul, e2) }
+  | e1=mul_expr DIV e2=atom { Bop (e1, Div, e2) }
+  | e1=mul_expr MOD e2=atom { Bop (e1, Mod, e2) }
 ;
 
-atom_fn:
-   expr=trailing_fn_noloc { {expr; loc = $startpos, $endpos} }
- | a=atom {a}
+mul_expr:
+    expr=mul_expr_noloc { {expr; loc = $startpos, $endpos} }
+  | a=atom { a }
 ;
 
-bexpr_nonpos:
-    x=string_loc WAL e=bexpr { Wal (x, e) }
-  | e1=bexpr TIMES e2=bexpr { Bop (e1, Mul, e2) }
-  | e1=bexpr DIV e2=bexpr { Bop (e1, Div, e2) }
-  | e1=bexpr MOD e2=bexpr { Bop (e1, Mod, e2) }
-  | e1=bexpr PLUS e2=bexpr { Bop (e1, Add, e2) }
-  | e1=bexpr MINUS e2=bexpr { Bop (e1, Sub, e2) }
-  | e1=bexpr DPLUS e2=bexpr { Bop (e1, Cat, e2) }
-  | e1=bexpr OR e2=bexpr { Bop (e1, Or, e2) }
-  | e1=bexpr AND e2=bexpr { Bop (e1, And, e2) }
-  | e1=bexpr EQ e2=bexpr { Bop (e1, Eq, e2) }
-  | e1=bexpr DIF e2=bexpr { Bop (e1, Dif, e2) }
+add_expr_noloc:
+    e1=add_expr PLUS e2=mul_expr { Bop (e1, Add, e2) }
+  | e1=add_expr MINUS e2=mul_expr { Bop (e1, Sub, e2) }
 ;
 
-ret_noloc:
-    RETURN e=expr { Ret e }
+add_expr:
+    expr=add_expr_noloc { {expr; loc = $startpos, $endpos} }
+  | e=mul_expr { e }
 ;
 
-ret:
-    expr=ret_noloc { {expr; loc = $startpos, $endpos} }
+expr:
+  e=add_expr { e }
 ;
 
-bexpr:
-    a=atom_fn { a } %prec FN
-  | e=bexpr_nonpos { {expr=e; loc = $startpos, $endpos} }
-;
-
-fn_noloc:
-  | fb=funbody { let arg, body = fb in Fun (arg, None, body) }
-;
-
-fn:
-    FN expr=fn_noloc { {expr; loc = $startpos, $endpos} }
-;
-
-(* on crée cette règle pour éviter les conflits shift/reduce *)
-rexpr_nonpos:
-  | IF e=bexpr r=ret { If (e, r, empty_block) }
-  | IF e=bexpr THEN t=expr { If(e, t, empty_block) }
-  | IF e=bexpr THEN t=expr ELSE f=expr { If(e, t, f) }
-;
-
-rexpr:
-    b=bexpr { b }
-  | e=ret { e }
-  | e=fn { e }
-  | e=rexpr_nonpos { {expr=e; loc = $startpos, $endpos} }
-;
-
-stmt_nonpos:
+stmt_noloc:
     e=expr SCOL+ { SExpr e }
   | VAL x=IDENT ASS l=expr SCOL+ { SVal (x, l) }
   | VAR x=IDENT WAL l=expr SCOL+ { SVar (x, l) }
 ;
 
 stmt:
-   stmt=stmt_nonpos { {stmt; loc = $startpos, $endpos} }
-;
-
-expr:
-    e=rexpr { e }
-  | LCUR SCOL* s=stmt* RCUR { {expr=Blk s; loc = $startpos, $endpos} }
+   stmt=stmt_noloc { {stmt; loc = $startpos, $endpos} }
 ;
 
 arg:
