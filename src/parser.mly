@@ -1,6 +1,7 @@
 %{
     open Syntax
     let empty_block = {expr = Blk []; loc = Lexing.dummy_pos, Lexing.dummy_pos}
+    let add_app {expr; loc} x = match expr with App (g, y) -> App (g, y @ [x]) | e -> App ({expr; loc}, [x])
 %}
 
 %token ELIF ELSE FN FUN IF RETURN THEN VAL VAR
@@ -23,6 +24,7 @@
 %nonassoc EQ DIF
 %left PLUS DPLUS MINUS
 %left TIMES MOD DIV
+%left FN
 
 %%
 
@@ -94,11 +96,12 @@ atom:
 ;
 
 trailing_fn_noloc :
-    a=atom f=fn { let a : expr_loc = a in match a.expr with App (g, x) -> App (g, x @ [f]) | e -> App (a, [f]) }
+    a=atom_fn FN f=fn { let a : expr_loc = a in add_app a f }
 ;
 
 atom_fn:
    expr=trailing_fn_noloc { {expr; loc = $startpos, $endpos} }
+ | a=atom {a}
 ;
 
 bexpr_nonpos:
@@ -124,16 +127,16 @@ ret:
 ;
 
 bexpr:
-    a=atom { a }
+    a=atom_fn { a } %prec FN
   | e=bexpr_nonpos { {expr=e; loc = $startpos, $endpos} }
 ;
 
 fn_noloc:
-  | FN fb=funbody { let arg, body = fb in Fun (arg, None, body) }
+  | fb=funbody { let arg, body = fb in Fun (arg, None, body) }
 ;
 
 fn:
-    expr=fn_noloc { {expr; loc = $startpos, $endpos} }
+    FN expr=fn_noloc { {expr; loc = $startpos, $endpos} }
 ;
 
 (* on crée cette règle pour éviter les conflits shift/reduce *)
@@ -147,7 +150,6 @@ rexpr:
     b=bexpr { b }
   | e=ret { e }
   | e=fn { e }
-  | e=atom_fn { e }
   | e=rexpr_nonpos { {expr=e; loc = $startpos, $endpos} }
 ;
 
