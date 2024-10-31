@@ -257,6 +257,7 @@ let rec infer ctx {expr; loc} = match expr with
       let e2, eff2 = check ctx e1.ty e2 in
       check_comparable loc e1.ty;
       {expr = Bop (e1, op, e2); ty = TCon "bool"}, eff1 ++ eff2
+
   | Blk [] -> {expr=Blk[]; ty=TCon "unit"}, (ESet.empty, None)
   | Blk ([{stmt=SExpr e; _}]) ->
       let e, eff = infer ctx e in

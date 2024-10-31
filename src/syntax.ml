@@ -7,7 +7,7 @@ type uop = Neg | Not
 [@@deriving show]
 
 type lit =
-  LUnit | LInt of int | LBool of bool | LString of string
+    LUnit | LInt of int | LBool of bool | LString of string
 [@@deriving show]
 
 type loc = [%import: Lexing.position] [@@deriving show]
@@ -36,7 +36,7 @@ type ('a, 'b, 'c) ty
   | TFun of 'a list * 'a * 'c | TVar of 'a tvar ref
 [@@deriving show]
 and 'a tvar =
-  TVUnbd of int | TVLink of 'a
+    TVUnbd of int | TVLink of 'a
 
 type type_loc =
   {ty : (type_loc, string_loc, string_loc list) ty; loc : loc * loc [@printer fun fmt t -> ()]}
