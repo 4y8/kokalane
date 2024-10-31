@@ -1,6 +1,9 @@
-type op =
+type bop =
     Add | Sub | Mul | Div | Mod | And | Or | Leq | Geq | Eq | Dif
   | Gt | Lt | Cat
+[@@deriving show]
+
+type uop = Neg | Not
 [@@deriving show]
 
 type lit =
@@ -44,7 +47,7 @@ type type_pure = (('a [@printer pp_type_pure], string, ESet.t * bool option ref 
 
 type ('a, 'b, 'c, 'd) expr
   = If  of 'a * 'a * 'a
-  | Bop of 'a * op * 'a
+  | Bop of 'a * bop * 'a
   | Ret of 'a
   | Var of string
   | Lit of lit
@@ -53,6 +56,7 @@ type ('a, 'b, 'c, 'd) expr
   | Fun of ('b * 'd) list * 'd option * 'a
   | Blk of 'c list
   | Lst of 'a list
+  | Uop of uop * 'a
 and expr_loc =
   {expr : (expr_loc, string_loc, stmt_loc, type_loc) expr; loc : loc * loc [@printer fun fmt t -> ()]}
 

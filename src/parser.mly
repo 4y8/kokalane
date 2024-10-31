@@ -8,10 +8,11 @@
 %token <string>STRING
 %token <int>INT
 %token <string>IDENT
-%token BANG OR AND
+%token OR AND
 %token PLUS MINUS TIMES DIV MOD LEQ GEQ EQ DIF ASS WAL ARR DPLUS
 %token LPAR RPAR LCUR RCUR LANG RANG LSQU RSQU
 %token SCOL DOT DCOL COMMA EOF
+%token BANG TILDE
 %token TRUE FALSE
 %start file
 %type <decl_loc list> file
@@ -74,41 +75,69 @@ let atom :=
       | ~ = lit; <Lit>
       | LSQU; ~ = separated_list(COMMA, expr); RSQU; <Lst>
       | ~ = atom; LPAR; ~ = separated_list(COMMA, expr); RPAR; <App>
+      | x = atom; DOT; f = var; { App (f, [x]) }
   )
 
 let atom_app(expr) :=
   | ~ = atom; <>
   | loc_expr(a = atom; f = fn(expr); { add_app a f })
 
+un_op:
+  | BANG { Not }
+  | TILDE { Neg }
+;
+
+let un_expr :=
+  | loc_expr(~ = un_op; ~ = atom; <Uop>)
+  | ~ = atom; <>
+
+let bop(left, op, right) :=
+  | ~ = right; <>
+  | loc_expr(~ = left; ~ = op; ~ = right; <Bop>)
+
 mul_op:
   | TIMES { Mul }
   | DIV { Div }
   | MOD { Mod }
 ;
-
-let mul_expr :=
-  | ~ = atom; <>
-  | loc_expr(~ = mul_expr; ~ = mul_op; ~ = atom; <Bop>)
+let mul_expr := bop(mul_expr, mul_op, un_expr)
+let fin_mul_right(expr) :=
+  | ~ = atom_app(expr); <>
+  | ~ = fn(expr); <>
+  | ~ = return(expr); <>
+  | loc_expr(~ = un_op; ~ = atom; <Uop>)
+let fin_mul_expr(expr) := bop(mul_expr, mul_op, fin_mul_right(expr))
 
 add_op:
   | PLUS { Add }
   | MINUS { Sub }
   | DPLUS { Cat }
 ;
+let add_expr := bop(add_expr, add_op, mul_expr)
+let fin_add_expr(expr) := bop(add_expr, add_op, fin_mul_expr(expr))
 
-let add_expr :=
-  | ~ = mul_expr; <>
-  | loc_expr(~ = add_expr; ~ = add_op; ~ = mul_expr; <Bop>)
+cmp_op:
+  | LANG { Lt }
+  | LEQ { Leq }
+  | RANG { Gt }
+  | GEQ { Geq }
+  | EQ { Eq }
+  | DIF { Dif }
+;
+let cmp_expr := bop(cmp_expr, cmp_op, add_expr)
+let fin_cmp_expr(expr) := bop(cmp_expr, cmp_op, fin_add_expr(expr))
 
-let fin_add_expr(expr) :=
-  | ~ = fin_mul_expr(expr); <>
-  | loc_expr(~ = add_expr; ~ = add_op; ~ = fin_mul_expr(expr); <Bop>)
+and_op:
+    AND { And }
+;
+let and_expr := bop(and_expr, and_op, cmp_expr)
+let fin_and_expr(expr) := bop(and_expr, and_op, fin_cmp_expr(expr))
 
-let fin_mul_expr(expr) :=
-  | ~ = atom_app(expr); <>
-  | ~ = fn(expr); <>
-  | ~ = return(expr); <>
-  | loc_expr(~ = mul_expr; ~ = mul_op; ~ = atom_app(expr); <Bop>)
+or_op:
+    OR { Or }
+;
+let or_expr := bop(or_expr, or_op, and_expr)
+let fin_or_expr(expr) := bop(or_expr, or_op, fin_and_expr(expr))
 
 let fn(expr) :=
     loc_expr(
@@ -121,7 +150,7 @@ let return(expr) :=
   )
 
 let wal_expr(expr) :=
-  | ~ = fin_add_expr(expr); <>
+  | ~ = fin_or_expr(expr); <>
   | loc_expr(~ = string_loc; WAL; ~ = expr; <Wal>)
 
 let no_dangling_expr :=
@@ -134,6 +163,7 @@ let if_expr :=
   | loc_expr(
     | IF; ~ = hi_expr; THEN; ~ = no_dangling_expr; ELSE; ~ = expr; <If>
     | IF; c = hi_expr; THEN; e = expr; { If (c, e, empty_block) }
+    | IF; c = hi_expr; r = return(expr); { If (c, r, empty_block) }
   )
 
 hi_expr:

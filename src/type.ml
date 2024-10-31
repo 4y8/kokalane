@@ -324,6 +324,7 @@ let rec remove_tvar_expr {expr; ty} =
     | Fun (x, None, e) -> Fun (x, None, remove_tvar_expr e)
     | Blk l -> Blk (List.map remove_tvar_stmt l)
     | Lst l -> Lst (List.map remove_tvar_expr l)
+    | Uop (o, e) -> Uop (o, remove_tvar_expr e)
   in
   {expr; ty = remove_tvar ty}
 

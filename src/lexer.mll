@@ -45,6 +45,8 @@ rule lexer = parse
   | "]" { RSQU }
   | "<" { LANG }
   | ">" { RANG }
+  | "!" { BANG }
+  | "~" { TILDE }
   | "/*" { comment lexbuf }
   | ('-'? ('0' | ['1'-'9'] digit*)) as s { INT (int_of_string s) }
   | (lower other* '\''*) as s { match Hashtbl.find_opt ident_tbl s with
