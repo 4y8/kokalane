@@ -77,6 +77,11 @@ atom:
   | e=var { e }
 ;
 
+atom_app:
+    a=atom f=fn { {expr = add_app a f; loc = $startpos, $endpos} }
+  | a=atom { a }
+;
+
 mul_expr_noloc:
     e1=mul_expr TIMES e2=atom { Bop (e1, Mul, e2) }
   | e1=mul_expr DIV e2=atom { Bop (e1, Div, e2) }
@@ -98,8 +103,42 @@ add_expr:
   | e=mul_expr { e }
 ;
 
+fin_add_expr:
+    e=fin_mul_expr { e }
+  | expr=fin_add_expr_noloc { {expr; loc = $startpos, $endpos} }
+;
+
+fin_mul_expr_noloc:
+    e1=mul_expr TIMES e2=atom_app { Bop (e1, Mul, e2) }
+  | e1=mul_expr DIV e2=atom_app { Bop (e1, Div, e2) }
+  | e1=mul_expr MOD e2=atom_app { Bop (e1, Mod, e2) }
+;
+
+fin_mul_expr:
+    expr=fin_mul_expr_noloc { {expr; loc = $startpos, $endpos} }
+  | a=atom_app { a }
+;
+
+fin_add_expr_noloc:
+    e1=add_expr PLUS e2=fin_mul_expr { Bop (e1, Add, e2) }
+  | e1=add_expr MINUS e2=fin_mul_expr { Bop (e1, Sub, e2) }
+;
+
+fn_expr_noloc:
+    FN f=funbody { let x, b = f in Fun (x, None, b) }
+;
+
+fn:
+    expr=fn_expr_noloc { {expr; loc = $startpos, $endpos} }
+;
+
+fn_expr:
+    e=fn { e }
+  | e=fin_add_expr { e }
+;
+
 expr:
-  e=add_expr { e }
+  e=fn_expr { e }
 ;
 
 stmt_noloc:
