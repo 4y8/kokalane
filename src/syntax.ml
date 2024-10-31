@@ -87,5 +87,5 @@ type decl_type = (expr_type, type_pure, type_pure, string) decl
 [@@deriving show]
 
 let is_arith_op = function
-    Add | Sub | Mul | Div | Mod -> true
+  | Add | Sub | Mul | Div | Mod -> true
   | _ -> false
