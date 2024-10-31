@@ -141,7 +141,7 @@ let fin_or_expr(expr) := bop(or_expr, or_op, fin_and_expr(expr))
 
 let fn(expr) :=
     loc_expr(
-      FN; f = funbody(expr); { let x, b = f in Fun (x, None, b) }
+      FN; f = funbody(expr); { let x, r, b = f in Fun (x, r, b) }
   )
 
 let return(expr) :=
@@ -188,16 +188,20 @@ stmt:
 let block :=
     loc_expr(LCUR; SCOL*; ~ = stmt*; RCUR; <Blk>)
 
+ann:
+    DCOL r = result { r }
+;
+
 arg:
     x = string_loc DCOL t = ty { x, t }
 ;
 
 let funbody(expr) :=
-    LPAR; x = separated_list(COMMA, arg); RPAR; e = expr; <>
+    LPAR; x = separated_list(COMMA, arg); RPAR; ~ = option(ann); e = expr; <>
 
 decl:
     FUN name = string_loc fb = funbody(expr) SCOL+
-    { let arg, body = fb in { name; arg; body; res = None } }
+    { let arg, res, body = fb in { name; arg; body; res } }
 ;
 
 file:

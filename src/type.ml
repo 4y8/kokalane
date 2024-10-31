@@ -106,7 +106,7 @@ let unify_effset ((eff, constr) as e) ((eff', constr') as e') =
                                       
   
 let rec eqtype t t' = match t, t' with
-    TCon s, TCon s' -> true
+    TCon s, TCon s' -> s = s'
   | TApp (f, t), TApp (f', t') -> f = f' && eqtype t t'
   | TFun (arg, res, eff), TFun (arg', res', eff') ->
     begin try
@@ -320,8 +320,7 @@ let rec remove_tvar_expr {expr; ty} =
     | Lit l -> Lit l
     | App (f, x) -> App (remove_tvar_expr f, List.map remove_tvar_expr x)
     | Wal (x, e) -> Wal (x, remove_tvar_expr e)
-    | Fun (x, Some t, e) -> Fun (x, Some (remove_tvar t), remove_tvar_expr e)
-    | Fun (x, None, e) -> Fun (x, None, remove_tvar_expr e)
+    | Fun (x, t, e) -> Fun (x, remove_tvar t, remove_tvar_expr e)
     | Blk l -> Blk (List.map remove_tvar_stmt l)
     | Lst l -> Lst (List.map remove_tvar_expr l)
     | Uop (o, e) -> Uop (o, remove_tvar_expr e)
@@ -331,7 +330,7 @@ let rec remove_tvar_expr {expr; ty} =
 let check_decl var {name; arg; res; body} =
   let ret_type = match res with
       None -> new_tvar ()
-    | Some t -> erase_type t
+    | Some (eff, t) -> erase_type t
   in
 
   let arg =
@@ -376,7 +375,7 @@ let check_decl var {name; arg; res; body} =
 
 exception NoMain
 
-let check_file =
+let check_file (p : decl_loc list) =
   let add_function mp (x, t) =
     if SMap.mem x.string mp then
       Error.error_str x.loc (sprintf "Function %s defined twice" x.string)
@@ -402,4 +401,4 @@ let check_file =
         None -> raise NoMain
       | Some main -> [], main
   in
-  check_file None SMap.empty
+  check_file None SMap.empty p

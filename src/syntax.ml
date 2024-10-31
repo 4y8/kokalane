@@ -45,7 +45,7 @@ type type_loc =
 type type_pure = (('a [@printer pp_type_pure], string, ESet.t * bool option ref option [@printer fun fmt t -> ()]) ty) as 'a
 [@@deriving show]
 
-type ('a, 'b, 'c, 'd) expr
+type ('a, 'b, 'c, 'd, 'e) expr
   = If  of 'a * 'a * 'a
   | Bop of 'a * bop * 'a
   | Ret of 'a
@@ -53,12 +53,13 @@ type ('a, 'b, 'c, 'd) expr
   | Lit of lit
   | App of 'a * 'a list
   | Wal of 'b * 'a
-  | Fun of ('b * 'd) list * 'd option * 'a
+  | Fun of ('b * 'd) list * 'e * 'a
   | Blk of 'c list
   | Lst of 'a list
   | Uop of uop * 'a
 and expr_loc =
-  {expr : (expr_loc, string_loc, stmt_loc, type_loc) expr; loc : loc * loc [@printer fun fmt t -> ()]}
+  {expr : (expr_loc, string_loc, stmt_loc, type_loc, result option) expr; loc : loc * loc [@printer fun fmt t -> ()]}
+and result = string_loc list * type_loc
 
 and 'a stmt
   = SExpr of 'a
@@ -69,7 +70,7 @@ and stmt_loc =
 [@@deriving show]
 
 type expr_type =
-  {expr : (expr_type, string, stmt_type, type_pure) expr ; ty : type_pure}
+  {expr : (expr_type, string, stmt_type, type_pure, type_pure) expr ; ty : type_pure}
 
 and stmt_type = expr_type stmt
 [@@deriving show]
@@ -79,7 +80,7 @@ type ('a, 'b, 'c, 'd) decl =
   ; body : 'a }
 [@@deriving show]
 
-type decl_loc = (expr_loc, type_loc, type_loc option, string_loc) decl
+type decl_loc = (expr_loc, type_loc, result option, string_loc) decl
 [@@deriving show]
 
 type decl_type = (expr_type, type_pure, type_pure, string) decl
