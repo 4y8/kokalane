@@ -18,13 +18,15 @@
 
 %%
 
-lit:
-    i=INT { LInt i }
-  | s=STRING { LString s }
-  | TRUE { LBool true }
-  | FALSE { LBool false }
-  | LPAR RPAR { LUnit }
-;
+let loc_expr(expr) ==
+  ~ = expr; { { expr; loc = $startpos, $endpos } }
+
+let lit :=
+  | ~ = INT; <LInt>
+  | ~ = STRING; <LString>
+  | TRUE; { LBool true }
+  | FALSE; { LBool false }
+  | LPAR; RPAR; { LUnit }
 
 string_loc:
      string=IDENT { {string; loc = $startpos, $endpos} }
@@ -48,89 +50,72 @@ result:
 (* cette règle ne considère que des listes de 0, 2 ou plus types (i.e. tout sauf
 1) pour éviter des conflits avec le 3ème cas de atype *)
 tlist:
-   { [] }
+  | { [] }
   | t=ty COMMA l=separated_nonempty_list(COMMA, ty) { t :: l }
 ;
 
 ty_noloc:
-    t=atype ARR r=result { let e, t' = r in TFun ([t], t', e) }
+  | t=atype ARR r=result { let e, t' = r in TFun ([t], t', e) }
   | LPAR t=tlist RPAR ARR r=result { let e, t' = r in TFun (t, t', e) }
 ;
 
 ty:
-    t=atype { t }
+  | t=atype { t }
   | ty=ty_noloc { {ty; loc = $startpos, $endpos} }
 ;
 
 var:
-  v=IDENT { {expr = Var v; loc = $startpos, $endpos} }
+    v=IDENT { {expr = Var v; loc = $startpos, $endpos} }
 ;
 
-atom_noloc:
-    l=lit { Lit l }
-  | x=atom DOT f=var { App(f, [x]) }
+let atom :=
+  | LPAR; e = expr; RPAR; <>
+  | e = var; <>
+  | loc_expr(~ = lit; <Lit>)
+
+let atom_app :=
+  | ~ = atom; <>
+  | loc_expr(a = atom; f = fn; { add_app a f })
+
+mul_op:
+  | TIMES { Mul }
+  | DIV { Div }
+  | MOD { Mod }
 ;
 
-atom:
-    expr=atom_noloc { {expr; loc = $startpos, $endpos} }
-  | LPAR e=expr RPAR { e }
-  | e=var { e }
+let mul_expr :=
+  | ~ = atom; <>
+  | loc_expr(
+      ~ = mul_expr; ~ = mul_op; ~ = atom; <Bop>
+  )
+
+add_op:
+  | PLUS { Add }
+  | MINUS { Sub }
 ;
 
-atom_app:
-    a=atom f=fn { {expr = add_app a f; loc = $startpos, $endpos} }
-  | a=atom { a }
-;
+let add_expr :=
+  | ~ = mul_expr; <>
+  | loc_expr(
+      ~ = add_expr; ~ = add_op; ~ = mul_expr; <Bop>
+  )
 
-mul_expr_noloc:
-    e1=mul_expr TIMES e2=atom { Bop (e1, Mul, e2) }
-  | e1=mul_expr DIV e2=atom { Bop (e1, Div, e2) }
-  | e1=mul_expr MOD e2=atom { Bop (e1, Mod, e2) }
-;
+let fin_add_expr :=
+  | ~ = fin_mul_expr; <>
+  | loc_expr(
+      ~ = add_expr; ~ = add_op; ~ = fin_mul_expr; <Bop>
+  )
 
-mul_expr:
-    expr=mul_expr_noloc { {expr; loc = $startpos, $endpos} }
-  | a=atom { a }
-;
+let fin_mul_expr :=
+  | ~ = atom_app; <>
+  | loc_expr (
+      ~ = mul_expr; ~ = mul_op; ~ = atom_app; <Bop>
+  )
 
-add_expr_noloc:
-    e1=add_expr PLUS e2=mul_expr { Bop (e1, Add, e2) }
-  | e1=add_expr MINUS e2=mul_expr { Bop (e1, Sub, e2) }
-;
-
-add_expr:
-    expr=add_expr_noloc { {expr; loc = $startpos, $endpos} }
-  | e=mul_expr { e }
-;
-
-fin_add_expr:
-    e=fin_mul_expr { e }
-  | expr=fin_add_expr_noloc { {expr; loc = $startpos, $endpos} }
-;
-
-fin_mul_expr_noloc:
-    e1=mul_expr TIMES e2=atom_app { Bop (e1, Mul, e2) }
-  | e1=mul_expr DIV e2=atom_app { Bop (e1, Div, e2) }
-  | e1=mul_expr MOD e2=atom_app { Bop (e1, Mod, e2) }
-;
-
-fin_mul_expr:
-    expr=fin_mul_expr_noloc { {expr; loc = $startpos, $endpos} }
-  | a=atom_app { a }
-;
-
-fin_add_expr_noloc:
-    e1=add_expr PLUS e2=fin_mul_expr { Bop (e1, Add, e2) }
-  | e1=add_expr MINUS e2=fin_mul_expr { Bop (e1, Sub, e2) }
-;
-
-fn_expr_noloc:
-    FN f=funbody { let x, b = f in Fun (x, None, b) }
-;
-
-fn:
-    expr=fn_expr_noloc { {expr; loc = $startpos, $endpos} }
-;
+let fn :=
+    loc_expr(
+       FN; f = funbody; { let x, b = f in Fun (x, None, b) }
+  )
 
 fn_expr:
     e=fn { e }
@@ -138,7 +123,8 @@ fn_expr:
 ;
 
 expr:
-  e=fn_expr { e }
+    e=fn_expr { e }
+  | e=block { e }
 ;
 
 stmt_noloc:
@@ -149,6 +135,14 @@ stmt_noloc:
 
 stmt:
    stmt=stmt_noloc { {stmt; loc = $startpos, $endpos} }
+;
+
+block_noloc:
+   LCUR SCOL* l=stmt* RCUR { Blk l }
+;
+
+block:
+   expr=block_noloc { {expr; loc = $startpos, $endpos} }
 ;
 
 arg:
