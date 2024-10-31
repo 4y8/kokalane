@@ -1,5 +1,5 @@
 open Pprint
-open Type
+open Infer
 open Eval
 
 let _ =
