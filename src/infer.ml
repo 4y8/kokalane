@@ -25,7 +25,7 @@ let rec infer ctx {expr; loc} = match expr with
           error_str loc (sprintf "Variable %s is immutable" x.string)
       | Some (t, true) ->
           let e, eff = check ctx t e in
-          {expr = Wal (x.string, e); ty = TCon "unit"}, eff
+          {expr = Wal (x.string, e); ty = unit}, eff
       end
   | App (f, x) when is_builtin_fun f <> "" ->
       let s = is_builtin_fun f in
@@ -33,48 +33,49 @@ let rec infer ctx {expr; loc} = match expr with
         "println", [e] ->
           let e, eff = infer ctx e in
           check_printable loc e.ty;
-          let pr_type = TFun ([e.ty], TCon "unit", add_effect eff EConsole) in
-          {expr = App({expr = Var s; ty = pr_type}, [e]); ty = TCon "unit"},
+          let pr_type = TFun ([e.ty], unit, add_effect eff EConsole) in
+          {expr = App({expr = Var s; ty = pr_type}, [e]); ty = unit},
           add_effect eff EConsole
       | "default", [e; e'] ->
           let e', eff' = infer ctx e' in
-          let e, eff = check ctx (TApp ("maybe", e'.ty)) e in
+          let e, eff = check ctx (maybe e'.ty) e in
           let def_type = TFun ([e.ty; e'.ty], e'.ty, eff) in
-          {expr = App({expr = Var s; ty = def_type}, [e; e']); ty = e'.ty},
+          {expr = App ({expr = Var s; ty = def_type}, [e; e']); ty = e'.ty},
           eff ++ eff'
       | "head", [e] ->
           let tv = new_tvar () in
-          let e, eff = check ctx (TApp ("list", tv)) e in
-          let hd_type = TFun ([TApp ("list", tv)], TApp ("maybe", tv), eff) in
-          {expr = App({expr = Var s; ty = hd_type}, [e]); ty = TApp ("maybe", tv)}, eff
+          let e, eff = check ctx (list tv) e in
+          let hd_type = TFun ([list tv], maybe tv, eff) in
+          {expr = App ({expr = Var s; ty = hd_type}, [e]); ty = maybe tv}, eff
       | "tail", [e] ->
-          let tv = TApp ("list", new_tvar ()) in
+          let tv = list (new_tvar ()) in
           let e, eff = check ctx tv e in
           let tl_type = TFun ([tv], tv, no_effect) in
           {expr = App({expr = Var s; ty = tl_type}, [e]); ty = tv}, eff
       | "repeat", [n; b] ->
-          let n, eff = check ctx (TCon "int") n in
-          let b, eff' = check_fun ctx [] (TCon "unit") b in
-          let rep_type = TFun ([TCon "int"; b.ty], TCon "unit", eff ++ eff') in
-          {expr = App({expr = Var s; ty = rep_type}, [n; b]); ty = TCon "unit"},
+          let n, eff = check ctx int n in
+          let b, eff' = check_fun ctx [] unit b in
+          let rep_type = TFun ([int; b.ty], unit, eff ++ eff') in
+          {expr = App ({expr = Var s; ty = rep_type}, [n; b]); ty = unit},
           eff ++ eff'
       | "while", [c; b] ->
-          let c, eff = check_fun ctx [] (TCon "bool") c in
-          let b, eff' = check_fun ctx [] (TCon "unit") b in
+          let c, eff = check_fun ctx [] bool c in
+          let b, eff' = check_fun ctx [] unit b in
           let eff = add_effect (eff ++ eff') EDiv in
-          let whi_type = TFun ([c.ty; b.ty], TCon "unit", eff) in
-          {expr = App({expr = Var s; ty = whi_type}, [c; b]); ty = TCon "unit"},
+          let whi_type = TFun ([c.ty; b.ty], unit, eff) in
+          {expr = App ({expr = Var s; ty = whi_type}, [c; b]); ty = unit},
           eff
       | "for", [m; n; b] ->
-          let m, eff = check ctx (TCon "int") m in
-          let n, eff' = check ctx (TCon "int") n in
-          let b, eff'' = check_fun ctx [TCon "int"] (TCon "unit") b in
+          let m, eff = check ctx int m in
+          let n, eff' = check ctx int n in
+          let b, eff'' = check_fun ctx [int] unit b in
           let eff = eff ++ eff' ++ eff'' in
-          let for_type = TFun ([m.ty; n.ty; b.ty], TCon "unit", eff) in
-          {expr = App({expr = Var s; ty = for_type}, [m; n; b]); ty = TCon "unit"},
+          let for_type = TFun ([m.ty; n.ty; b.ty], unit, eff) in
+          {expr = App({expr = Var s; ty = for_type}, [m; n; b]); ty = unit},
           eff
-      | _ -> Error.error_str loc
-               (sprintf "Function %s, got the wrong number of arguments" s)
+      | _ ->
+          error_str loc @@
+          sprintf "Function %s, got the wrong number of arguments" s
                 (* pourrait être mieux, en signalant le nombre d'arguments attendu *)
       end
   | App (f, x) ->
@@ -86,29 +87,31 @@ let rec infer ctx {expr; loc} = match expr with
              {expr = App (f, x); ty = res},
              List.fold_left (++) (eff ++ eff') eff''
            with Invalid_argument _ ->
-             Error.error_str loc (sprintf "Function expected %d \
-                                           arguments, got %d" (List.length arg) (List.length x)))
-      | _ -> Error.error loc (fun fmt ->
-          fprintf fmt "Exepected a function, got an expression of type %a"
-            Pprint.fmt_type f.ty)
+             error_str loc @@
+             sprintf "Function expected %d arguments, got %d" (List.length arg)
+               (List.length x))
+      | _ ->
+          error loc (fun fmt ->
+              fprintf fmt "Exepected a function, got an expression of type %a"
+                Pprint.fmt_type f.ty)
       end
   | Lst l ->
       let ty = new_tvar () in
       let l, eff = List.split (List.map (check ctx ty) l) in
-      {expr = Lst l; ty = TApp ("list", ty)}, List.fold_left (++) (ESet.empty, None) eff
+      {expr = Lst l; ty = list ty}, List.fold_left (++) no_effect eff
   | If (e, b1, b2) ->
-      let e, eff = check ctx (TCon "bool") e in
+      let e, eff = check ctx bool e in
       let b1, eff1 = infer ctx b1 in
       let b2, eff2 = check ctx b1.ty b2 in
       {expr = If (e, b1, b2); ty = b1.ty}, eff ++ eff1 ++ eff2
   | Bop (e1, ((Add | Sub | Mul | Div | Mod) as op), e2) ->
-      let e1, eff1 = check ctx (TCon "int") e1 in
-      let e2, eff2 = check ctx (TCon "int") e2 in
-      {expr = Bop (e1, op, e2); ty = TCon "int"}, eff1 ++ eff2
+      let e1, eff1 = check ctx int e1 in
+      let e2, eff2 = check ctx int e2 in
+      {expr = Bop (e1, op, e2); ty = int}, eff1 ++ eff2
   | Bop (e1, ((And | Or) as op), e2) ->
-      let e1, eff1 = check ctx (TCon "bool") e1 in
-      let e2, eff2 = check ctx (TCon "bool") e2 in
-      {expr = Bop (e1, op, e2); ty = TCon "bool"}, eff1 ++ eff2
+      let e1, eff1 = check ctx bool e1 in
+      let e2, eff2 = check ctx bool e2 in
+      {expr = Bop (e1, op, e2); ty = bool}, eff1 ++ eff2
   | Bop (e1, Cat, e2) ->
       let e1, eff1 = infer ctx e1 in
       let e2, eff2 = check ctx e1.ty e2 in
@@ -118,23 +121,23 @@ let rec infer ctx {expr; loc} = match expr with
       let e1, eff1 = infer ctx e1 in
       let e2, eff2 = check ctx e1.ty e2 in
       check_comparable loc e1.ty;
-      {expr = Bop (e1, op, e2); ty = TCon "bool"}, eff1 ++ eff2
+      {expr = Bop (e1, op, e2); ty = bool}, eff1 ++ eff2
   | Bop (e1, ((Eq | Dif) as op), e2) ->
       let e1, eff1 = infer ctx e1 in
       let e2, eff2 = check ctx e1.ty e2 in
       check_equalable loc e1.ty;
-      {expr = Bop (e1, op, e2); ty = TCon "bool"}, eff1 ++ eff2
+      {expr = Bop (e1, op, e2); ty = bool}, eff1 ++ eff2
   | Blk (l) ->
       infer_blk ctx loc l
   | Ret e ->
       let e, eff = check ctx ctx.ret_type e in
       {expr = Ret e; ty = new_tvar ()}, eff
   | Uop (Neg, e) ->
-      let e, eff = check ctx (TCon "int") e in
-      {expr = Uop (Neg, e); ty = TCon "int"}, eff
+      let e, eff = check ctx int e in
+      {expr = Uop (Neg, e); ty = int}, eff
   | Uop (Not, e) ->
-      let e, eff = check ctx (TCon "bool") e in
-      {expr = Uop (Neg, e); ty = TCon "bool"}, eff
+      let e, eff = check ctx bool e in
+      {expr = Uop (Neg, e); ty = bool}, eff
   | Fun (arg, t, b) ->
       let ret_type = match t with
           Some (eff, t) -> erase_type t
@@ -144,7 +147,7 @@ let rec infer ctx {expr; loc} = match expr with
       let x, t = List.split arg in
       let add_var mp (x, t) =
         if SMap.mem x.string mp then
-          Error.error_str x.loc (sprintf "Argument %s defined twice" x.string)
+          error_str x.loc (sprintf "Argument %s defined twice" x.string)
         else
           SMap.add x.string (t, false) mp
       in
@@ -163,17 +166,17 @@ and check ctx t {expr; loc} =
       Error.type_mismatch loc t e.ty
   with
     Occurs ->
-      Error.error loc (fun fmt ->
+      error loc (fun fmt ->
           fprintf fmt "Occurs check failed between types %a and %a"
             Pprint.fmt_type t Pprint.fmt_type e.ty)
 
 and infer_blk ctx loc = function
-    [] -> {expr=Blk[]; ty=TCon "unit"}, (ESet.empty, None)
-  | [{stmt=SExpr e; _}] ->
+    [] -> {expr = Blk[]; ty = unit}, no_effect
+  | [{stmt = SExpr e; _}] ->
       let e, eff = infer ctx e in
-      {expr = Blk([SExpr e]); ty = e.ty}, eff
+      {expr = Blk [SExpr e]; ty = e.ty}, eff
   | hd :: tl ->
-      let tl = {expr=Blk tl; loc} in
+      let tl = {expr = Blk tl; loc} in
       let get_tl_blk {expr; ty} = match expr with
           Blk l -> l, ty
         | _ -> failwith "internal error"
@@ -187,17 +190,17 @@ and infer_blk ctx loc = function
       | SVal (x, e) ->
           let e, eff = infer ctx e in
           let tl, eff' =
-            infer {ctx with var=SMap.add x (e.ty, false) ctx.var} tl
+            infer {ctx with var = SMap.add x (e.ty, false) ctx.var} tl
           in
           let tl, ty = get_tl_blk tl in
           {expr = Blk ((SVal (x, e)) :: tl); ty}, eff ++ eff'
       | SVar (x, e) ->
           let e, eff = infer ctx e in
           let tl, eff' =
-            infer {ctx with var=SMap.add x (e.ty, true) ctx.var} tl
+            infer {ctx with var = SMap.add x (e.ty, true) ctx.var} tl
           in
           let tl, ty = get_tl_blk tl in
-          {expr = Blk ((SVal (x, e)) :: tl); ty}, eff ++ eff'
+          {expr = Blk (SVal (x, e) :: tl); ty}, eff ++ eff'
 
 (* la fonction ne sera pas appelé avec des variables de types dans l, pas besoin
    de traiter l'exception occurs check *)
@@ -206,9 +209,9 @@ and check_fun ctx l rt e =
   let e, eff = infer ctx e in
   let t = TFun (l, rt, no_effect) in
   (if not (eqtype ~check_effect:false e.ty t) then
-    Error.error loc (fun fmt ->
-        fprintf fmt "Expected a function of type %a, got an expression of type %a"
-          Pprint.fmt_type t Pprint.fmt_type e.ty));
+    error loc (fun fmt ->
+         fprintf fmt "Expected a function of type %a, got an expression of type %a"
+           Pprint.fmt_type t Pprint.fmt_type e.ty));
   match fst (remove_tvar e.ty) with
     TFun (_, _, eff') -> e, eff ++ eff'
   | _ -> failwith "internal error" (* impossible normalement *)
@@ -225,8 +228,8 @@ let check_decl var {name; arg; res; body} =
   let var = SMap.add name.string (TFun (t, ret_type, eff), false) var in
   let add_var mp (x, t) =
     if SMap.mem x.string mp then
-      Error.error_str x.loc (sprintf "Argument %s of %s defined twice" x.string
-                               name.string)
+      error_str x.loc @@
+      sprintf "Argument %s of %s defined twice" x.string name.string
     else
       SMap.add x.string (t, false) mp
   in
@@ -240,8 +243,8 @@ let check_decl var {name; arg; res; body} =
     if !has_console = None then eff
     else if !has_console = Some false then
       if ESet.mem EConsole (fst eff) then
-        Error.error_str name.loc
-          (sprintf "Function %s has console effect while it shouldn't" name.string)
+        error_str name.loc @@
+        sprintf "Function %s has console effect while it shouldn't" name.string
       else eff
     else add_effect eff EConsole
   in
@@ -254,7 +257,7 @@ exception NoMain
 let check_file (p : decl_loc list) =
   let add_function mp (x, t) =
     if SMap.mem x.string mp then
-      Error.error_str x.loc (sprintf "Function %s defined twice" x.string)
+      error_str x.loc (sprintf "Function %s defined twice" x.string)
     else
       SMap.add x.string (t, false) mp
   in
@@ -266,7 +269,7 @@ let check_file (p : decl_loc list) =
             if d.arg = [] then
               Some d
             else
-              Error.error_str hd.name.loc "Function name takes no argument"
+              error_str hd.name.loc "Function name takes no argument"
           else main
         in
         let var = add_function var (hd.name, d.res) in
