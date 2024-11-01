@@ -101,14 +101,22 @@ let rec eval ctx {expr; ty} = match expr with
           end
       | "repeat", [e; b] ->
           let n = int (eval ctx e) in
+          let f = match eval ctx b with
+              VClo f -> f
+            | _ -> failwith "impossible"
+          in
           for _ = 1 to n do
-            ignore (eval ctx b)
+            ignore (f [])
           done; VUnit
       | "for", [e; e'; b] ->
           let m = int (eval ctx e) in
           let n = int (eval ctx e') in
-          for _ = m to n do
-            ignore (eval ctx b)
+          let f = match eval ctx b with
+              VClo f -> f
+            | _ -> failwith "impossible"
+          in
+          for i = m to n do
+            ignore (f [VInt i])
           done; VUnit
       | "default", [e; d] ->
           begin match eval ctx e with
@@ -117,8 +125,16 @@ let rec eval ctx {expr; ty} = match expr with
           | _ -> failwith "impossible"
           end
       | "while", [c; b] ->
-          while (eval ctx c) = VBool true do
-            ignore (eval ctx b)
+          let f = match eval ctx b with
+              VClo f -> f
+            | _ -> failwith "impossible"
+          in
+          let c = match eval ctx c with
+              VClo f -> f
+            | _ -> failwith "impossible"
+          in
+          while (c []) = VBool true do
+            ignore (f [])
           done; VUnit
       | _ -> failwith "impossible"
       end

@@ -33,6 +33,7 @@ let check_printable loc =
     | _ -> false
   in
   let error t =
+    print_endline (show_type_pure t);
     Error.error loc (fun fmt ->
         Format.fprintf fmt "Tried to print %a which can't be printed"
           Pprint.fmt_type t)
@@ -81,13 +82,15 @@ let rec check_occurs x = function
       | TVUnbd n when n = x -> raise Occurs
       | _ -> ()
 
-let rec eqtype t t' = match t, t' with
+let rec eqtype  ?(check_effect=true) t t' = match t, t' with
     TCon s, TCon s' -> s = s'
-  | TApp (f, t), TApp (f', t') -> f = f' && eqtype t t'
+  | TApp (f, t), TApp (f', t') -> f = f' && eqtype t t' ~check_effect
   | TFun (arg, res, eff), TFun (arg', res', eff') ->
       begin try
-        unify_effset eff eff';
-        List.for_all2 eqtype arg arg' && eqtype res res'
+        if check_effect then
+          unify_effset eff eff';
+        List.for_all2 (eqtype ~check_effect) arg arg'
+        && eqtype ~check_effect res res'
       with
         Invalid_argument _ -> false
       end
@@ -154,14 +157,18 @@ let type_of_lit = function
 exception Polymorphism
 
 let rec remove_tvar = function
-    | TCon s -> TCon s
-    | TApp (s, t) -> TApp (s, remove_tvar t)
+    | TCon s -> TCon s, false
+    | TApp (s, t) ->
+        let t, has_free = remove_tvar t in
+        TApp (s, t), has_free
     | TFun (arg, res, eff) ->
-      TFun (List.map remove_tvar arg, remove_tvar res, eff)
+        let res, has_free = remove_tvar res in
+        let arg, has_free' = List.map remove_tvar arg |> List.split in
+        TFun (arg, res, eff), List.fold_left (||) has_free has_free'
     | TVar r ->
         match !r with
           TVLink t -> remove_tvar t
-        | TVUnbd _ -> raise Polymorphism
+        | TVUnbd _ -> TVar r, true
 
 let rec remove_tvar_expr {expr; ty} =
   let remove_tvar_stmt = function
@@ -180,10 +187,9 @@ let rec remove_tvar_expr {expr; ty} =
     | Lit l -> Lit l
     | App (f, x) -> App (remove_tvar_expr f, List.map remove_tvar_expr x)
     | Wal (x, e) -> Wal (x, remove_tvar_expr e)
-    | Fun (x, t, e) -> Fun (x, remove_tvar t, remove_tvar_expr e)
+    | Fun (x, t, e) -> Fun (x, fst (remove_tvar t), remove_tvar_expr e)
     | Blk l -> Blk (List.map remove_tvar_stmt l)
     | Lst l -> Lst (List.map remove_tvar_expr l)
     | Uop (o, e) -> Uop (o, remove_tvar_expr e)
   in
-  {expr; ty = remove_tvar ty}
-
+  {expr; ty = fst (remove_tvar ty)}

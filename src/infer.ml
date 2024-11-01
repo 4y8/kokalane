@@ -1,55 +1,8 @@
+open Effect
 open Syntax
 open Syntax.Effect
+open Format
 open Type
-open Effect
-
-let check_decl var {name; arg; res; body} =
-  let ret_type = match res with
-      None -> new_tvar ()
-    | Some (eff, t) -> erase_type t
-  in
-
-  let arg =
-    List.map (fun (x, t) -> check_valid_type t; (x, erase_type t)) arg
-  in
-  let x, t = List.split arg in
-  let has_console = ref None in
-  let eff = ESet.singleton EDiv, Some has_console in
-  let var =
-    SMap.add name.string (TFun (t, ret_type, eff), false) var
-  in
-  let add_var mp (x, t) =
-    if SMap.mem x.string mp then
-      Error.error_str x.loc (sprintf "Argument %s of %s defined twice" x.string
-                               name.string)
-    else
-      SMap.add x.string (t, false) mp
-  in
-  let var =
-    List.fold_left add_var var arg
-  in
-  let body, eff = check {var; ret_type; rec_fun = name.string; rec_eff = EMap.empty} ret_type body in
-  let ret_type =
-    try
-      remove_tvar ret_type
-    with
-      Polymorphism ->
-        Error.error_str name.loc
-          (sprintf "Function %s has polymporphic type" name.string)
-  in
-  let eff =
-    if !has_console = None then eff
-    else if !has_console = Some false then
-      if ESet.mem EConsole (fst eff) then
-        raise EffectUnification
-      else eff
-    else add_effect eff EConsole
-  in
-  let body = remove_tvar_expr body in
-  let arg = List.map (fun (x, t) -> (x.string, t)) arg in
-  {name = name.string; arg; body; res = TFun (t, ret_type, eff)}
-
-exception NoMain
 
 let rec infer ctx {expr; loc} = match expr with
     Lit l -> {expr=Lit l; ty =type_of_lit l}, no_effect
@@ -73,11 +26,11 @@ let rec infer ctx {expr; loc} = match expr with
         "println", [e] ->
           let e, eff = infer ctx e in
           check_printable loc e.ty;
-          let pr_type = TFun ([e.ty], TCon "unit", (ESet.singleton EConsole, None)) in
+          let pr_type = TFun ([e.ty], TCon "unit", add_effect eff EConsole) in
           {expr = App({expr = Var s; ty = pr_type}, [e]); ty = TCon "unit"},
           add_effect eff EConsole
       | "default", [e; e'] ->
-          let e', eff' = infer ctx e in
+          let e', eff' = infer ctx e' in
           let e, eff = check ctx (TApp ("maybe", e'.ty)) e in
           let def_type = TFun ([e.ty; e'.ty], e'.ty, eff) in
           {expr = App({expr = Var s; ty = def_type}, [e; e']); ty = e'.ty},
@@ -86,7 +39,7 @@ let rec infer ctx {expr; loc} = match expr with
           let tv = new_tvar () in
           let e, eff = check ctx (TApp ("list", tv)) e in
           let hd_type = TFun ([TApp ("list", tv)], TApp ("maybe", tv), eff) in
-          {expr = App({expr = Var s; ty = hd_type}, [e]); ty = tv}, eff
+          {expr = App({expr = Var s; ty = hd_type}, [e]); ty = TApp ("maybe", tv)}, eff
       | "tail", [e] ->
           let tv = TApp ("list", new_tvar ()) in
           let e, eff = check ctx tv e in
@@ -94,9 +47,25 @@ let rec infer ctx {expr; loc} = match expr with
           {expr = App({expr = Var s; ty = tl_type}, [e]); ty = tv}, eff
       | "repeat", [n; b] ->
           let n, eff = check ctx (TCon "int") n in
-          let b, eff' = check_unit_fun ctx b in
+          let b, eff' = check_fun ctx [] (TCon "unit") b in
           let rep_type = TFun ([TCon "int"; b.ty], TCon "unit", eff ++ eff') in
-          {expr = App({expr = Var s; ty = rep_type}, [n; b]); ty = TCon "unit"}, eff ++ eff'
+          {expr = App({expr = Var s; ty = rep_type}, [n; b]); ty = TCon "unit"},
+          eff ++ eff'
+      | "while", [c; b] ->
+          let c, eff = check_fun ctx [] (TCon "bool") c in
+          let b, eff' = check_fun ctx [] (TCon "unit") b in
+          let eff = add_effect (eff ++ eff') EDiv in
+          let whi_type = TFun ([c.ty; b.ty], TCon "unit", eff) in
+          {expr = App({expr = Var s; ty = whi_type}, [c; b]); ty = TCon "unit"},
+          eff
+      | "for", [m; n; b] ->
+          let m, eff = check ctx (TCon "int") m in
+          let n, eff' = check ctx (TCon "int") n in
+          let b, eff'' = check_fun ctx [TCon "int"] (TCon "unit") b in
+          let eff = eff ++ eff' ++ eff'' in
+          let for_type = TFun ([m.ty; n.ty; b.ty], TCon "unit", eff) in
+          {expr = App({expr = Var s; ty = for_type}, [m; n; b]); ty = TCon "unit"},
+          eff
       | _ -> Error.error_str loc (sprintf "Function %s, got the wrong \
                                            number of arguments" s) (* pourrait être mieux, en signalant le nombre
                             d'arguments attendu *)
@@ -204,10 +173,63 @@ and infer_blk ctx loc = function
           let tl, ty = get_tl_blk tl in
           {expr = Blk ((SVal (x, e)) :: tl); ty}, eff ++ eff'
 
-and check_unit_fun ctx e =
+(* la fonction ne sera pas appelé avec des variables de types dans l, pas besoin
+   de traiter l'exception occurs check *)
+and check_fun ctx l rt e =
+  let loc = e.loc in
   let e, eff = infer ctx e in
-  let rec check = function
-    TVar r
+  let t = TFun (l, rt, no_effect) in
+  (if not (eqtype ~check_effect:false e.ty t) then
+    Error.error loc (fun fmt ->
+        fprintf fmt "Expected a function of type %a, got an expression of type %a"
+          Pprint.fmt_type t Pprint.fmt_type e.ty));
+  match fst (remove_tvar e.ty) with
+    TFun (_, _, eff') -> e, eff ++ eff'
+  | _ -> failwith "internal error" (* impossible normalement *)
+
+let check_decl var {name; arg; res; body} =
+  let ret_type = match res with
+      None -> new_tvar ()
+    | Some (eff, t) -> erase_type t
+  in
+
+  let arg =
+    List.map (fun (x, t) -> check_valid_type t; (x, erase_type t)) arg
+  in
+  let x, t = List.split arg in
+  let has_console = ref None in
+  let eff = ESet.singleton EDiv, Some has_console in
+  let var =
+    SMap.add name.string (TFun (t, ret_type, eff), false) var
+  in
+  let add_var mp (x, t) =
+    if SMap.mem x.string mp then
+      Error.error_str x.loc (sprintf "Argument %s of %s defined twice" x.string
+                               name.string)
+    else
+      SMap.add x.string (t, false) mp
+  in
+  let var =
+    List.fold_left add_var var arg
+  in
+  let body, eff = check {var; ret_type; rec_fun = name.string; rec_eff = EMap.empty} ret_type body in
+  let ret_type, poly = remove_tvar ret_type in
+  if poly then
+    Error.error_str name.loc
+      (sprintf "Function %s has polymporphic type" name.string);
+  let eff =
+    if !has_console = None then eff
+    else if !has_console = Some false then
+      if ESet.mem EConsole (fst eff) then
+        raise EffectUnification
+      else eff
+    else add_effect eff EConsole
+  in
+  let body = remove_tvar_expr body in
+  let arg = List.map (fun (x, t) -> (x.string, t)) arg in
+  {name = name.string; arg; body; res = TFun (t, ret_type, eff)}
+
+exception NoMain
 
 let check_file (p : decl_loc list) =
   let add_function mp (x, t) =

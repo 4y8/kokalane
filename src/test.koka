@@ -1,3 +1,3 @@
 fun main() : <console> unit {
-  if 1 then if 3 then 4 else 5;
+  println(default(head([]), 1));
 };
