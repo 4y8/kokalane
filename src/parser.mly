@@ -76,6 +76,7 @@ let atom :=
       | LSQU; ~ = separated_list(COMMA, expr); RSQU; <Lst>
       | ~ = atom; LPAR; ~ = separated_list(COMMA, expr); RPAR; <App>
       | x = atom; DOT; f = var; { App (f, [x]) }
+      | f = atom; b = block; { let b = {expr = Fun ([], None, b); loc = b.loc} in add_app f b }
   )
 
 let atom_app(expr) :=
@@ -136,6 +137,7 @@ let fin_and_expr(expr) := bop(and_expr, and_op, fin_cmp_expr(expr))
 or_op:
     OR { Or }
 ;
+
 let or_expr := bop(or_expr, or_op, and_expr)
 let fin_or_expr(expr) := bop(or_expr, or_op, fin_and_expr(expr))
 

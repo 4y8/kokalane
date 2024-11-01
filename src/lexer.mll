@@ -5,8 +5,7 @@
 
   let _ = List.iter (fun (k, v) -> Hashtbl.add ident_tbl k v)
     ["elif", ELIF; "else", ELSE; "fn", FN; "fun", FUN; "if", IF;
-     "return", RETURN; "then", THEN; "val", VAL; "var", VAR;
-     "True", TRUE; "False", FALSE]
+     "return", RETURN; "then", THEN; "val", VAL; "var", VAR]
 
   let error = Error.error_str_lexbuf
 }
@@ -51,6 +50,8 @@ rule lexer = parse
   | ('-'? ('0' | ['1'-'9'] digit*)) as s { INT (int_of_string s) }
   | (lower other* '\''*) as s { match Hashtbl.find_opt ident_tbl s with
     None -> IDENT s | Some t -> t }
+  | "True" { TRUE }
+  | "False" { FALSE }
   | '"' { STRING (string [] lexbuf) }
   | eof { EOF }
   | _ as c { error lexbuf (Printf.sprintf "Unknown character : %c" c) }

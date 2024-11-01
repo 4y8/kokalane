@@ -4,12 +4,18 @@ open Syntax.Effect
 open Format
 
 type ctx =
-  { var : (type_pure * bool) SMap.t; ret_type : type_pure; rec_fun : string
-  ; rec_eff : bool EMap.t }
+  { var : (type_pure * bool) SMap.t; ret_type : type_pure; rec_fun : string }
 
 let valid_types =
   ["int", 0; "bool", 0; "unit", 0; "string", 0; "list", 1; "maybe", 1]
   |> List.to_seq |> SMap.of_seq
+
+let int = TCon "int"
+let unit = TCon "unit"
+let bool = TCon "bool"
+let string = TCon "string"
+let list t = TApp ("list", t)
+let maybe t = TApp ("maybe", t)
 
 let builtin_fun =
   ["println"; "repeat"; "while"; "default"; "for"; "head"; "tail"]
@@ -20,7 +26,7 @@ let is_builtin_fun {expr; loc} = match expr with
   | _ -> ""
 
 let rec check_prop_type loc error pr = function
-    TVar r as t->
+    TVar r as t ->
       begin match !r with
         TVLink t -> check_prop_type loc error pr t
       | _ -> error t
@@ -103,27 +109,15 @@ let rec eqtype  ?(check_effect=true) t t' = match t, t' with
   | _, TVar _ -> eqtype t' t
   | _, _ -> false
 
-let rec erase_type {ty; loc} = match ty with
-    TCon s -> TCon s
-  | TApp (s, t) -> TApp (s.string, erase_type t)
-  | TFun (arg, res, eff) ->
-      TFun (List.map erase_type arg, erase_type res,
-            (List.map (fun s -> SMap.find s.string valid_effects) eff
-             |> ESet.of_list, None))
-  | TVar r ->
-      match !r with
-        TVLink ty -> TVar (ref (TVLink (erase_type ty)))
-      | TVUnbd n -> TVar (ref (TVUnbd n))
-
 let tvar = ref 0
 
 let new_tvar () =
   incr tvar; TVar (ref (TVUnbd !tvar))
 
-let rec check_valid_type {ty; loc} = match ty with
+let rec erase_type {ty; loc} = match ty with
     TCon s ->
       begin match SMap.find_opt s valid_types with
-        Some 0 -> ()
+        Some 0 -> TCon s
       | None ->
           Error.error_str loc @@ sprintf "Unknown type constructor: %s" s
       | Some n ->
@@ -133,7 +127,7 @@ let rec check_valid_type {ty; loc} = match ty with
       end
   | TApp ({string; loc}, t) ->
       begin match SMap.find_opt string valid_types with
-        Some 1 -> check_valid_type t
+        Some 1 -> TApp (string, erase_type t)
       | None ->
           Error.error_str loc @@
           sprintf "Unknown type constructor: %s" string
@@ -143,16 +137,16 @@ let rec check_valid_type {ty; loc} = match ty with
             string n
       end
   | TFun (l, t, e) ->
-      List.iter check_valid_type l; check_valid_type t;
-      List.iter check_valid_effect e
-  | TVar _ -> () (* les types fournis par l'utilisateur ne contiennent pas de
+      TFun (List.map erase_type l, erase_type t,
+            (List.map erase_effect e |> ESet.of_list, None))
+  | TVar _ -> failwith "impossible" (* les types fournis par l'utilisateur ne contiennent pas de
                     variable de type *)
 
 let type_of_lit = function
-    LInt _ -> TCon "int"
-  | LBool _ -> TCon "bool"
-  | LUnit -> TCon "unit"
-  | LString _ -> TCon "string"
+    LInt _ -> int
+  | LBool _ -> bool
+  | LString _ -> string
+  | LUnit -> unit
 
 exception Polymorphism
 
@@ -187,7 +181,7 @@ let rec remove_tvar_expr {expr; ty} =
     | Lit l -> Lit l
     | App (f, x) -> App (remove_tvar_expr f, List.map remove_tvar_expr x)
     | Wal (x, e) -> Wal (x, remove_tvar_expr e)
-    | Fun (x, t, e) -> Fun (x, fst (remove_tvar t), remove_tvar_expr e)
+    | Fun (x, (), e) -> Fun (x, (), remove_tvar_expr e)
     | Blk l -> Blk (List.map remove_tvar_stmt l)
     | Lst l -> Lst (List.map remove_tvar_expr l)
     | Uop (o, e) -> Uop (o, remove_tvar_expr e)

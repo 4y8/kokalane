@@ -49,6 +49,7 @@ let unify_effset ((eff, constr) as e) ((eff', constr') as e') =
     unify_console e e';
     unify_console e' e
 
-let check_valid_effect {string; loc} =
-  if not SMap.(mem string valid_effects) then
-    error_str loc @@ sprintf "Unknown effect: %s" string
+let erase_effect {string; loc} =
+  match SMap.find_opt string valid_effects with
+    None -> error_str loc @@ sprintf "Unknown effect: %s" string
+  | Some e -> e

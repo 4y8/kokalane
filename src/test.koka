@@ -1,3 +1,3 @@
-fun main() : <console> unit {
-  println(default(head([]), 1));
+fun main() {
+  while { True; } { println("hello"); };
 };

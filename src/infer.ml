@@ -3,22 +3,29 @@ open Syntax
 open Syntax.Effect
 open Format
 open Type
+open Error
 
 let rec infer ctx {expr; loc} = match expr with
-    Lit l -> {expr=Lit l; ty =type_of_lit l}, no_effect
+    Lit l -> {expr = Lit l; ty = type_of_lit l}, no_effect
   | Var x ->
       begin match SMap.find_opt x ctx.var with
-        Some (t, _) -> {expr=Var x; ty=t}, no_effect
+        Some (t, _) ->
+          let eff =
+            if x = ctx.rec_fun
+            then add_effect no_effect EDiv
+            else no_effect
+          in
+          {expr = Var x; ty=t}, eff
       | None -> Error.unknown_var loc x
       end
   | Wal (x, e) ->
       begin match SMap.find_opt x.string ctx.var with
-        None -> Error.unknown_var x.loc x.string
+        None -> unknown_var x.loc x.string
       | Some (_, false) ->
-          Error.error_str loc (sprintf "Variable %s is immutable" x.string)
+          error_str loc (sprintf "Variable %s is immutable" x.string)
       | Some (t, true) ->
           let e, eff = check ctx t e in
-          {expr=Wal(x.string, e); ty = TCon "unit"}, eff
+          {expr = Wal (x.string, e); ty = TCon "unit"}, eff
       end
   | App (f, x) when is_builtin_fun f <> "" ->
       let s = is_builtin_fun f in
@@ -66,9 +73,9 @@ let rec infer ctx {expr; loc} = match expr with
           let for_type = TFun ([m.ty; n.ty; b.ty], TCon "unit", eff) in
           {expr = App({expr = Var s; ty = for_type}, [m; n; b]); ty = TCon "unit"},
           eff
-      | _ -> Error.error_str loc (sprintf "Function %s, got the wrong \
-                                           number of arguments" s) (* pourrait être mieux, en signalant le nombre
-                            d'arguments attendu *)
+      | _ -> Error.error_str loc
+               (sprintf "Function %s, got the wrong number of arguments" s)
+                (* pourrait être mieux, en signalant le nombre d'arguments attendu *)
       end
   | App (f, x) ->
       let f, eff = infer ctx f in
@@ -94,7 +101,7 @@ let rec infer ctx {expr; loc} = match expr with
       let b1, eff1 = infer ctx b1 in
       let b2, eff2 = check ctx b1.ty b2 in
       {expr = If (e, b1, b2); ty = b1.ty}, eff ++ eff1 ++ eff2
-  | Bop (e1, op, e2) when is_arith_op op ->
+  | Bop (e1, ((Add | Sub | Mul | Div | Mod) as op), e2) ->
       let e1, eff1 = check ctx (TCon "int") e1 in
       let e2, eff2 = check ctx (TCon "int") e2 in
       {expr = Bop (e1, op, e2); ty = TCon "int"}, eff1 ++ eff2
@@ -128,7 +135,26 @@ let rec infer ctx {expr; loc} = match expr with
   | Uop (Not, e) ->
       let e, eff = check ctx (TCon "bool") e in
       {expr = Uop (Neg, e); ty = TCon "bool"}, eff
-  | _ -> failwith "faut finir l'inférence de type"
+  | Fun (arg, t, b) ->
+      let ret_type = match t with
+          Some (eff, t) -> erase_type t
+        | None -> new_tvar ()
+      in
+      let arg = List.map (fun (x, t) -> x, erase_type t) arg in
+      let x, t = List.split arg in
+      let add_var mp (x, t) =
+        if SMap.mem x.string mp then
+          Error.error_str x.loc (sprintf "Argument %s defined twice" x.string)
+        else
+          SMap.add x.string (t, false) mp
+      in
+      let var =
+        List.fold_left add_var ctx.var arg
+      in
+      let body, eff = check {ctx with var} ret_type b in
+      let arg = List.map (fun (x, t) -> (x.string, t)) arg in
+      {expr = Fun (arg, (), body); ty = TFun (t, body.ty, eff)}, no_effect
+
 
 and check ctx t {expr; loc} =
   let e, eff = infer ctx {expr; loc} in
@@ -192,16 +218,11 @@ let check_decl var {name; arg; res; body} =
       None -> new_tvar ()
     | Some (eff, t) -> erase_type t
   in
-
-  let arg =
-    List.map (fun (x, t) -> check_valid_type t; (x, erase_type t)) arg
-  in
+  let arg = List.map (fun (x, t) -> x, erase_type t) arg in
   let x, t = List.split arg in
   let has_console = ref None in
   let eff = ESet.singleton EDiv, Some has_console in
-  let var =
-    SMap.add name.string (TFun (t, ret_type, eff), false) var
-  in
+  let var = SMap.add name.string (TFun (t, ret_type, eff), false) var in
   let add_var mp (x, t) =
     if SMap.mem x.string mp then
       Error.error_str x.loc (sprintf "Argument %s of %s defined twice" x.string
@@ -209,10 +230,8 @@ let check_decl var {name; arg; res; body} =
     else
       SMap.add x.string (t, false) mp
   in
-  let var =
-    List.fold_left add_var var arg
-  in
-  let body, eff = check {var; ret_type; rec_fun = name.string; rec_eff = EMap.empty} ret_type body in
+  let var = List.fold_left add_var var arg in
+  let body, eff = check {var; ret_type; rec_fun = name.string } ret_type body in
   let ret_type, poly = remove_tvar ret_type in
   if poly then
     Error.error_str name.loc
@@ -221,7 +240,8 @@ let check_decl var {name; arg; res; body} =
     if !has_console = None then eff
     else if !has_console = Some false then
       if ESet.mem EConsole (fst eff) then
-        raise EffectUnification
+        Error.error_str name.loc
+          (sprintf "Function %s has console effect while it shouldn't" name.string)
       else eff
     else add_effect eff EConsole
   in

@@ -70,7 +70,7 @@ and stmt_loc =
 [@@deriving show]
 
 type expr_type =
-  {expr : (expr_type, string, stmt_type, type_pure, type_pure) expr ; ty : type_pure}
+  {expr : (expr_type, string, stmt_type, type_pure, unit) expr ; ty : type_pure}
 
 and stmt_type = expr_type stmt
 [@@deriving show]
@@ -85,7 +85,3 @@ type decl_loc = (expr_loc, type_loc, result option, string_loc) decl
 
 type decl_type = (expr_type, type_pure, type_pure, string) decl
 [@@deriving show]
-
-let is_arith_op = function
-  | Add | Sub | Mul | Div | Mod -> true
-  | _ -> false
