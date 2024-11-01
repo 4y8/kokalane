@@ -8,7 +8,7 @@ let _ =
   Lexing.set_filename lexbuf "test.koka";
   let p =
     try
-      Parser.file Lexer.lexer lexbuf
+      Parser.file Lexer.next_token lexbuf
     with
       _ ->
       Error.error_str_lexbuf lexbuf (Printf.sprintf "Unexpected token: \"%s\""

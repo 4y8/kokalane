@@ -1,10 +1,13 @@
 %{
     open Syntax
     let empty_block = {expr = Blk []; loc = Lexing.dummy_pos, Lexing.dummy_pos}
-    let add_app {expr; loc} x = match expr with App (g, y) -> App (g, y @ [x]) | e -> App ({expr; loc}, [x])
+    let add_app {expr; loc} x =
+      match expr with
+        App (g, y) -> App (g, y @ [x])
+      | e -> App ({expr; loc}, [x])
 %}
 
-%token ELIF ELSE FN FUN IF RETURN THEN VAL VAR
+%token ELSE FN FUN IF RETURN THEN VAL VAR
 %token <string>STRING
 %token <int>INT
 %token <string>IDENT
@@ -65,8 +68,7 @@ ty:
   | ty = ty_noloc { {ty; loc = $startpos, $endpos} }
 ;
 
-let var :=
-    loc_expr (~=IDENT; <Var>)
+let var := loc_expr (~=IDENT; <Var>)
 
 let atom :=
   | LPAR; e = expr; RPAR; <>
@@ -76,7 +78,8 @@ let atom :=
       | LSQU; ~ = separated_list(COMMA, expr); RSQU; <Lst>
       | ~ = atom; LPAR; ~ = separated_list(COMMA, expr); RPAR; <App>
       | x = atom; DOT; f = var; { App (f, [x]) }
-      | f = atom; b = block; { let b = {expr = Fun ([], None, b); loc = b.loc} in add_app f b }
+      | f = atom; b = block;
+        { let b = {expr = Fun ([], None, b); loc = b.loc} in add_app f b }
   )
 
 let atom_app(expr) :=
@@ -142,14 +145,9 @@ let or_expr := bop(or_expr, or_op, and_expr)
 let fin_or_expr(expr) := bop(or_expr, or_op, fin_and_expr(expr))
 
 let fn(expr) :=
-    loc_expr(
-      FN; f = funbody(expr); { let x, r, b = f in Fun (x, r, b) }
-  )
+    loc_expr(FN; f = funbody(expr); { let x, r, b = f in Fun (x, r, b) })
 
-let return(expr) :=
-    loc_expr(
-      RETURN; ~ = expr; <Ret>
-  )
+let return(expr) := loc_expr(RETURN; ~ = expr; <Ret>)
 
 let wal_expr(expr) :=
   | ~ = fin_or_expr(expr); <>
@@ -158,7 +156,9 @@ let wal_expr(expr) :=
 let no_dangling_expr :=
   | ~ = wal_expr(no_dangling_expr); <>
   | ~ = block; <>
-  | loc_expr(IF; ~ = hi_expr; THEN; t = no_dangling_expr; ELSE; f = no_dangling_expr; <If>)
+  | loc_expr(
+      IF; ~ = hi_expr; THEN; t = no_dangling_expr; ELSE; f = no_dangling_expr;
+          <If>)
 
 let if_expr :=
   | ~ = wal_expr(expr); <>
@@ -169,7 +169,7 @@ let if_expr :=
   )
 
 hi_expr:
-  | e = if_expr { e }
+    e = if_expr { e }
 ;
 
 expr:
@@ -187,8 +187,7 @@ stmt:
     stmt = stmt_noloc { {stmt; loc = $startpos, $endpos} }
 ;
 
-let block :=
-    loc_expr(LCUR; SCOL*; ~ = stmt*; RCUR; <Blk>)
+let block := loc_expr(LCUR; SCOL*; ~ = stmt*; RCUR; <Blk>)
 
 ann:
     DCOL r = result { r }
@@ -207,5 +206,5 @@ decl:
 ;
 
 file:
-  SCOL* l = decl* EOF { l }
+    SCOL* l = decl* EOF { l }
 ;
