@@ -53,3 +53,6 @@ let erase_effect {string; loc} =
   match SMap.find_opt string valid_effects with
     None -> error_str loc @@ sprintf "Unknown effect: %s" string
   | Some e -> e
+
+let erase_effects l =
+  (List.map erase_effect l |> ESet.of_list, None)

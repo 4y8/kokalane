@@ -140,23 +140,31 @@ let rec infer ctx {expr; loc} = match expr with
       {expr = Uop (Neg, e); ty = bool}, eff
   | Fun (arg, t, b) ->
       let ret_type = match t with
-          Some (eff, t) -> erase_type t
+          Some (_, t) -> erase_type t
         | None -> new_tvar ()
       in
       let arg = List.map (fun (x, t) -> x, erase_type t) arg in
-      let x, t = List.split arg in
+      let x, tys = List.split arg in
       let add_var mp (x, t) =
         if SMap.mem x.string mp then
           error_str x.loc (sprintf "Argument %s defined twice" x.string)
         else
           SMap.add x.string (t, false) mp
       in
-      let var =
-        List.fold_left add_var ctx.var arg
-      in
+      let arg_map = List.fold_left add_var SMap.empty arg in
+      let var = SMap.merge (fun _ v1 v2 ->
+          match v1, v2 with
+            None, None -> None
+          | _, Some v -> Some v
+          | Some v, _ -> Some v) ctx.var arg_map in
       let body, eff = check {ctx with var; ret_type = new_tvar ()} ret_type b in
+      (match t with
+        None -> ()
+      | Some (e, _) ->
+          if not ESet.(equal (fst eff) (fst (erase_effects e))) then
+            error_str loc (sprintf "Anonymous function has ill defined effects."));
       let arg = List.map (fun (x, t) -> (x.string, t)) arg in
-      {expr = Fun (arg, (), body); ty = TFun (t, body.ty, eff)}, no_effect
+      {expr = Fun (arg, (), body); ty = TFun (tys, body.ty, eff)}, no_effect
 
 
 and check ctx t {expr; loc} =
@@ -225,7 +233,7 @@ let check_decl var {name; arg; res; body} =
   let ret_type, ret_eff = match res with
       None -> new_tvar (), (ESet.singleton EDiv, Some has_console)
     | Some (eff, t) ->
-        erase_type t, (List.map erase_effect eff |> ESet.of_list, None)
+        erase_type t, erase_effects eff
   in
   let arg = List.map (fun (x, t) -> x, erase_type t) arg in
   let x, t = List.split arg in

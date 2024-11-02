@@ -180,16 +180,29 @@ expr:
 ;
 
 stmt_noloc:
-  | e = expr SCOL+ { SExpr e }
   | VAL x = IDENT ASS l = expr SCOL+ { SVal (x, l) }
   | VAR x = IDENT WAL l = expr SCOL+ { SVar (x, l) }
 ;
 
-stmt:
-    stmt = stmt_noloc { {stmt; loc = $startpos, $endpos} }
+sexpr:
+  | e = expr SCOL+ { {stmt = SExpr e; loc = $startpos, $endpos} }
 ;
 
-let block := loc_expr(LCUR; SCOL*; ~ = stmt*; RCUR; <Blk>)
+stmt:
+  | stmt = stmt_noloc { {stmt; loc = $startpos, $endpos} }
+  | s = sexpr { s }
+;
+
+stmt_list:
+  | s = sexpr RCUR { [s] }
+  | s = stmt l = stmt_list { s :: l }
+;
+
+let block :=
+    loc_expr(
+    | LCUR; SCOL*; l = stmt_list; { Blk l }
+    | LCUR; SCOL*; RCUR; {Blk []}
+  )
 
 ann:
     DCOL r = result { r }

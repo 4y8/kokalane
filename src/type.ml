@@ -137,8 +137,7 @@ let rec erase_type {ty; loc} = match ty with
             string n
       end
   | TFun (l, t, e) ->
-      TFun (List.map erase_type l, erase_type t,
-            (List.map erase_effect e |> ESet.of_list, None))
+      TFun (List.map erase_type l, erase_type t, erase_effects e)
   | TVar _ -> failwith "impossible" (* les types fournis par l'utilisateur ne contiennent pas de
                     variable de type *)
 
