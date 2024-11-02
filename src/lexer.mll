@@ -83,6 +83,8 @@ rule lexer = parse
   | "->" { [ARR] }
   | "-" { [MINUS] }
   | "*" { [TIMES] }
+  | "/" { [DIV] }
+  | "%" { [MOD] }
   | ":=" { [WAL] }
   | "==" { [EQ] }
   | "!=" { [DIF] }

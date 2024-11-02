@@ -55,13 +55,14 @@ result:
 (* cette règle ne considère que des listes de 0, 2 ou plus types (i.e. tout sauf
 1) pour éviter des conflits avec le 3ème cas de atype *)
 tlist:
-  | { [] }
   | t=ty COMMA l=separated_nonempty_list(COMMA, ty) { t :: l }
 ;
 
 ty_noloc:
   | t = atype ARR r = result { let e, t' = r in TFun ([t], t', e) }
   | LPAR t = tlist RPAR ARR r = result { let e, t' = r in TFun (t, t', e) }
+  | LPAR RPAR { TCon "unit" }
+  | LPAR RPAR ARR r = result { let e, t' = r in TFun ([], t', e) }
 ;
 
 ty:
