@@ -127,7 +127,7 @@ let rec infer ctx {expr; loc} = match expr with
       let e2, eff2 = check ctx e1.ty e2 in
       check_equalable loc e1.ty;
       {expr = Bop (e1, op, e2); ty = bool}, eff1 ++ eff2
-  | Blk (l) ->
+  | Blk l ->
       infer_blk ctx loc l
   | Ret e ->
       let e, eff = check ctx ctx.ret_type e in

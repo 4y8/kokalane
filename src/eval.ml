@@ -19,6 +19,7 @@ let arith_op f v1 v2 =
   | _ -> failwith "impossible"
 
 let add = arith_op ( + )
+let sub = arith_op ( - )
 let mul = arith_op ( * )
 let div = arith_op ( / )
 let md = arith_op ( mod )
@@ -36,11 +37,6 @@ let geq = cmp_op ( >= )
 let eq v1 v2 = VBool (v1 = v2)
 let dif v1 v2 = VBool (v1 <> v2)
 
-let bool_op f v1 v2 =
-  match v1, v2 with
-    VBool b1, VBool b2 -> VBool (f b1 b2)
-  | _ -> failwith "impossible"
-
 let cat v1 v2 =
   match v1, v2 with
     VList l1, VList l2 -> VList (l1 @ l2)
@@ -49,7 +45,7 @@ let cat v1 v2 =
 
 let bop_assoc =
   [Add, add; Mul, mul; Mod, md; Div, div; Cat, cat; Lt, lt; Gt, gt; Leq, leq;
-   Geq, geq; Eq, eq; Dif, dif]
+   Geq, geq; Eq, eq; Dif, dif; Sub, sub]
 
 let nt = function
     VBool b -> VBool (not b)
@@ -72,8 +68,14 @@ let rec eval ctx {expr; ty} = match expr with
       if eval ctx e = VBool true then eval ctx b1
       else eval ctx b2
   | Wal (x, e) ->
-      failwith "mutation not supported yet"
+      let r = SMap.find x ctx in
+      r := (eval ctx e);
+      VUnit
   | Ret e -> raise (Return (eval ctx e))
+  | Bop (e1, And, e2) ->
+      if eval ctx e1 = VBool true then eval ctx e2 else VBool false
+  | Bop (e1, Or, e2) ->
+      if eval ctx e1 = VBool false then eval ctx e2 else VBool true
   | Bop (e1, op, e2) ->
       List.assoc op bop_assoc (eval ctx e1) (eval ctx e2)
   | Var x -> !(SMap.find x ctx)
@@ -162,3 +164,15 @@ and eval_blk ctx = function
   | SVal (x, e) :: tl
   | SVar (x, e) :: tl ->
       eval_blk (SMap.add x (ref (eval ctx e)) ctx) tl
+
+let eval_file pt main =
+  let rec loop ctx = function
+      [] -> ignore (eval ctx main.body)
+    | hd :: tl ->
+        let r = ref VUnit in
+        let ctx = SMap.add hd.name r ctx in
+        let v = eval ctx {expr = Fun (hd.arg, (), hd.body); ty = TCon "unit"} in
+        r := v;
+        loop ctx tl
+  in
+  loop SMap.empty pt

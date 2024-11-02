@@ -17,7 +17,7 @@ let _ =
           Error.error_str_lexbuf lexbuf (Printf.sprintf "Unexpected token: \"%s\""
                                            (Lexing.lexeme lexbuf))
     in
-    List.iter (fun d -> print_endline (Syntax.show_decl_loc d)) p;
+    (* List.iter (fun d -> print_endline (Syntax.show_decl_loc d)) p; *)
     if !parse_only then exit 0;
     let pt, main =
       try
@@ -25,8 +25,9 @@ let _ =
       with
         NoMain -> Error.error_str_lexbuf lexbuf "Missing main function"
     in
-    List.iter (fun d -> print_endline (Syntax.show_decl_type d)) pt;
+    (* List.iter (fun d -> print_endline (Syntax.show_decl_type d)) pt; *)
     if !type_only then exit 0;
+    eval_file pt main
   in
   Arg.parse ["--parse-only", Arg.Set parse_only, "Stop after parsing";
              "--type-only", Arg.Set type_only, "Stop after type checking"]

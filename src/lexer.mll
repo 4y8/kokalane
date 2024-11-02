@@ -135,6 +135,7 @@ and string acc = parse
         '"' -> string ('"' :: acc) lexbuf
       | '\\' -> string ('\\' :: acc) lexbuf
       | 't' -> string ('\t' :: acc) lexbuf
+      | 'r' -> string ('\r' :: acc) lexbuf
       | 'n' -> string ('\n' :: acc) lexbuf
       | c -> error lexbuf (Printf.sprintf "Unknown control sequence : %c" c) }
   | '\n' { error lexbuf "Newline character in string" }
