@@ -2,3 +2,4 @@ _build/*
 *.exe
 *.automaton
 *.conflicts
+kokac

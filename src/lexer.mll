@@ -62,6 +62,9 @@
     end;
     List.iter (fun t -> Queue.add t q) t;
     [Queue.take q]
+
+  let insert_nl lexbuf =
+    String.iter (fun c -> if c = '\n' then Lexing.new_line lexbuf)
 }
 
 let digit = ['0'-'9']
@@ -72,8 +75,8 @@ let blank_line = [' ' '\t' '\r']* '\n'
 
 rule lexer = parse
   | [' ' '\t' '\r'] { lexer lexbuf }
-  | blank_line* ((' '*) as s)
-    { Lexing.new_line lexbuf; new_line lexer lexbuf (String.length s) }
+  | (blank_line* as nl) ((' '*) as s)
+    { insert_nl lexbuf nl ; new_line lexer lexbuf (String.length s) }
   | "//" [^'\n']* '\n' { Lexing.new_line lexbuf; lexer lexbuf }
   | "++" { [DPLUS] }
   | "+" { [PLUS] }
