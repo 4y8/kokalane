@@ -1,3 +1,2 @@
-fun main() {
-  if True then 1 elif False then 3 else 2;
-};
+fun main() : int
+  if True then 1 elif False then 3 else 2

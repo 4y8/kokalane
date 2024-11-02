@@ -17,6 +17,7 @@
 %token SCOL DOT DCOL COMMA EOF
 %token BANG TILDE
 %token TRUE FALSE
+%token DUMMY
 %start file
 %type <decl_loc list> file
 
