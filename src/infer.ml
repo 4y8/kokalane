@@ -154,7 +154,7 @@ let rec infer ctx {expr; loc} = match expr with
       let var =
         List.fold_left add_var ctx.var arg
       in
-      let body, eff = check {ctx with var} ret_type b in
+      let body, eff = check {ctx with var; ret_type = new_tvar ()} ret_type b in
       let arg = List.map (fun (x, t) -> (x.string, t)) arg in
       {expr = Fun (arg, (), body); ty = TFun (t, body.ty, eff)}, no_effect
 
@@ -168,6 +168,10 @@ and check ctx t {expr; loc} =
     Occurs ->
       error loc (fun fmt ->
           fprintf fmt "Occurs check failed between types %a and %a"
+            Pprint.fmt_type t Pprint.fmt_type e.ty)
+  | EffectUnification ->
+      error loc (fun fmt ->
+          fprintf fmt "Effect mismatch between types %a and %a"
             Pprint.fmt_type t Pprint.fmt_type e.ty)
 
 and infer_blk ctx loc = function
@@ -217,15 +221,15 @@ and check_fun ctx l rt e =
   | _ -> failwith "internal error" (* impossible normalement *)
 
 let check_decl var {name; arg; res; body} =
-  let ret_type = match res with
-      None -> new_tvar ()
-    | Some (eff, t) -> erase_type t
+  let has_console = ref None in
+  let ret_type, ret_eff = match res with
+      None -> new_tvar (), (ESet.singleton EDiv, Some has_console)
+    | Some (eff, t) ->
+        erase_type t, (List.map erase_effect eff |> ESet.of_list, None)
   in
   let arg = List.map (fun (x, t) -> x, erase_type t) arg in
   let x, t = List.split arg in
-  let has_console = ref None in
-  let eff = ESet.singleton EDiv, Some has_console in
-  let var = SMap.add name.string (TFun (t, ret_type, eff), false) var in
+  let var = SMap.add name.string (TFun (t, ret_type, ret_eff), false) var in
   let add_var mp (x, t) =
     if SMap.mem x.string mp then
       error_str x.loc @@
@@ -233,7 +237,12 @@ let check_decl var {name; arg; res; body} =
     else
       SMap.add x.string (t, false) mp
   in
-  let var = List.fold_left add_var var arg in
+  let arg_map = List.fold_left add_var SMap.empty arg in
+  let var = SMap.merge (fun _ v1 v2 ->
+      match v1, v2 with
+        None, None -> None
+      | _, Some v -> Some v
+      | Some v, _ -> Some v) var arg_map in
   let body, eff = check {var; ret_type; rec_fun = name.string } ret_type body in
   let ret_type, poly = remove_tvar ret_type in
   if poly then
@@ -250,6 +259,9 @@ let check_decl var {name; arg; res; body} =
   in
   let body = remove_tvar_expr body in
   let arg = List.map (fun (x, t) -> (x.string, t)) arg in
+  if res <> None then
+    if not ESet.(equal (fst eff) (fst ret_eff)) then
+      error_str name.loc (sprintf "Function %s has ill defined effects." name.string);
   {name = name.string; arg; body; res = TFun (t, ret_type, eff)}
 
 exception NoMain
