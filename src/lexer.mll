@@ -68,14 +68,17 @@
 }
 
 let digit = ['0'-'9']
-let lower = ['a'-'z'] | '_'
+let lowerl = ['a'-'z']
+let lower = lowerl | '_'
 let upper = ['A'-'Z']
-let other = lower | upper | digit | '-'
-let blank_line = [' ' '\t' '\r']* '\n'
+let other = lower | upper | digit
+let ident = ((lower | (lowerl '-' (upper | lowerl))) (other | (lowerl | upper | digit) '-' (lowerl | upper))* ((lowerl | upper | digit) '-' | '\''*)) | (lowerl '-')
+
+let blank_line = [' ' '\t' '\r']* '\n' | "//" [^'\n']* '\n'
 
 rule lexer = parse
   | [' ' '\t' '\r'] { lexer lexbuf }
-  | (blank_line* as nl) ((' '*) as s)
+  | (blank_line+ as nl) ((' '*) as s)
     { insert_nl lexbuf nl ; new_line lexer lexbuf (String.length s) }
   | "//" [^'\n']* '\n' { Lexing.new_line lexbuf; lexer lexbuf }
   | "++" { [DPLUS] }
@@ -110,7 +113,7 @@ rule lexer = parse
   | "/*" { comment lexbuf }
   | ('-'? ('0' | ['1'-'9'] digit*)) as s { [INT (int_of_string s)] }
   | "elif" { [ELSE; IF] }
-  | (lower other* '\''*) as s { match Hashtbl.find_opt ident_tbl s with
+  | ident as s { match Hashtbl.find_opt ident_tbl s with
     None -> [IDENT s] | Some t -> [t] }
   | "True" { [TRUE] }
   | "False" { [FALSE] }
@@ -136,6 +139,18 @@ and string acc = parse
   | _ as c { string (c :: acc) lexbuf }
 
 {
+    let print_token = function
+    SCOL -> print_endline ";"
+  | RCUR -> print_endline "}"
+  | LCUR -> print_endline "{"
+  | IDENT s -> print_endline s
+  | INT n -> Printf.printf "%d\n" n
+  | FUN -> print_endline "fun"
+  | LPAR -> print_endline "("
+  | RPAR -> print_endline ")"
+  | IF -> print_endline "if"
+  | DCOL -> print_endline ":"
+
   let next_token lexbuf =
     let t =
       if not Queue.(is_empty q) then
