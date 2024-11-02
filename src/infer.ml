@@ -166,7 +166,6 @@ let rec infer ctx {expr; loc} = match expr with
       let arg = List.map (fun (x, t) -> (x.string, t)) arg in
       {expr = Fun (arg, (), body); ty = TFun (tys, body.ty, eff)}, no_effect
 
-
 and check ctx t {expr; loc} =
   let e, eff = infer ctx {expr; loc} in
   try
@@ -269,7 +268,8 @@ let check_decl var {name; arg; res; body} =
   let arg = List.map (fun (x, t) -> (x.string, t)) arg in
   if res <> None then
     if not ESet.(equal (fst eff) (fst ret_eff)) then
-      error_str name.loc (sprintf "Function %s has ill defined effects." name.string);
+      error_str name.loc @@
+      sprintf "Function %s has ill defined effects." name.string;
   {name = name.string; arg; body; res = TFun (t, ret_type, eff)}
 
 exception NoMain

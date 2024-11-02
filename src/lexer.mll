@@ -72,14 +72,15 @@ let lowerl = ['a'-'z']
 let lower = lowerl | '_'
 let upper = ['A'-'Z']
 let other = lower | upper | digit
-let ident = ((lower | (lowerl '-' (upper | lowerl))) (other | (lowerl | upper | digit) '-' (lowerl | upper))* ((lowerl | upper | digit) '-' | '\''*)) | (lowerl '-')
+let ident = ((lower | (lowerl '-' (upper | lowerl))) (other | (lowerl | upper | digit) '-' (lowerl | upper))* ((lowerl | upper | digit) '-' | '\''*)) | lowerl '-'
 
 let blank_line = [' ' '\t' '\r']* '\n' | "//" [^'\n']* '\n'
 
 rule lexer = parse
   | [' ' '\t' '\r'] { lexer lexbuf }
+  | (blank_line+ as nl) (' '*) "/*" { insert_nl lexbuf nl; begin_line_comment lexbuf }
   | (blank_line+ as nl) ((' '*) as s)
-    { insert_nl lexbuf nl ; new_line lexer lexbuf (String.length s) }
+    { insert_nl lexbuf nl; new_line lexer lexbuf (String.length s) }
   | "//" [^'\n']* '\n' { Lexing.new_line lexbuf; lexer lexbuf }
   | "++" { [DPLUS] }
   | "+" { [PLUS] }
@@ -124,6 +125,7 @@ rule lexer = parse
 and comment = parse
   | "*/" { lexer lexbuf }
   | '\n' { Lexing.new_line lexbuf ; comment lexbuf }
+  | eof { error lexbuf "Unterminated comment" }
   | _ { comment lexbuf }
 
 and string acc = parse
@@ -136,10 +138,20 @@ and string acc = parse
       | 'n' -> string ('\n' :: acc) lexbuf
       | c -> error lexbuf (Printf.sprintf "Unknown control sequence : %c" c) }
   | '\n' { error lexbuf "Newline character in string" }
+  | eof { error lexbuf "Unterminated string" }
   | _ as c { string (c :: acc) lexbuf }
 
+and begin_line_comment = parse
+  | "*/" (blank_line+ as nl) ((' '*) as s)
+    { insert_nl lexbuf nl ; new_line lexer lexbuf (String.length s) }
+  | "*/" eof { [EOF] }
+  | "*/" { error lexbuf "Comment disturbing indentation" }
+  | eof { error lexbuf "Unterminated comment" }
+  | '\n' { Lexing.new_line lexbuf ; begin_line_comment lexbuf }
+  | _ { begin_line_comment lexbuf }
+
 {
-    let print_token = function
+  let print_token = function
     SCOL -> print_endline ";"
   | RCUR -> print_endline "}"
   | LCUR -> print_endline "{"

@@ -18,6 +18,7 @@ let add_effect (eff, constr) e =
 
 let no_effect = ESet.empty, None
 
+(* à simplifier *)
 let unify_effset ((eff, constr) as e) ((eff', constr') as e') =
   if ESet.mem EDiv eff && not ESet.(mem EDiv eff') || ESet.mem EDiv eff' && not ESet.(mem EDiv eff) then
     raise EffectUnification
