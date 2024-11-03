@@ -13,6 +13,8 @@ type value
 
 exception Return of value
 
+let int = function VInt n -> n | _ -> failwith "impossible"
+
 let arith_op f v1 v2 =
   match v1, v2 with
     VInt n1, VInt n2 -> VInt (f n1 n2)
@@ -21,8 +23,20 @@ let arith_op f v1 v2 =
 let add = arith_op ( + )
 let sub = arith_op ( - )
 let mul = arith_op ( * )
-let div = arith_op ( / )
-let md = arith_op ( mod )
+let div v1 v2 =
+  if v2 = VInt 0 then VInt 0 else
+    let i = int v1 in
+    let j = int v2 in
+    let d = i / j in
+    let m = i mod j in
+    VInt (if i < 0 && m < 0 then d - (if j < 0 then -1 else 1) else i / j)
+
+let md v1 v2 =
+  if v2 = VInt 0 then v1 else
+    let i = int v1 in
+    let j = int v2 in
+    let m = i mod j in
+    VInt (if i < 0 && m < 0 then m + (if j < 0 then -j else j) else m)
 
 let cmp_op f v1 v2 =
   match v1, v2 with
@@ -57,7 +71,6 @@ let neg = function
 
 let uop_assoc = [Neg, neg; Not, nt]
 
-let int = function VInt n -> n | _ -> failwith "impossible"
 
 let rec eval ctx {expr; ty} = match expr with
     Lit (LInt n) -> VInt n
