@@ -20,6 +20,11 @@
 %token DUMMY
 %start file
 %type <decl_loc list> file
+%left OR
+%left AND
+%left EQ RANG LANG LEQ GEQ DIF
+%left PLUS MINUS DPLUS
+%left TIMES DIV MOD
 
 %%
 
@@ -97,54 +102,32 @@ let un_expr :=
   | loc_expr(~ = un_op; ~ = atom; <Uop>)
   | ~ = atom; <>
 
-let bop(left, op, right) :=
-  | ~ = right; <>
-  | loc_expr(~ = left; ~ = op; ~ = right; <Bop>)
+let op ==
+  | TIMES; { Mul }
+  | DIV; { Div }
+  | MOD; { Mod }
+  | PLUS; { Add }
+  | MINUS; { Sub }
+  | DPLUS; { Cat }
+  | LANG; { Lt }
+  | LEQ; { Leq }
+  | RANG; { Gt }
+  | GEQ; { Geq }
+  | EQ; { Eq }
+  | DIF; { Dif }
+  | OR; { Or }
+  | AND; { And }
 
-mul_op:
-  | TIMES { Mul }
-  | DIV { Div }
-  | MOD { Mod }
-;
-let mul_expr := bop(mul_expr, mul_op, un_expr)
-let fin_mul_right(expr) :=
+let bop_expr :=
+  | ~ = un_expr; <>
+  | loc_expr(l = bop_expr; o = op; r = bop_expr; <Bop>)
+
+let fin_expr(expr) :=
   | ~ = atom_app(expr); <>
   | ~ = fn(expr); <>
   | ~ = return(expr); <>
   | loc_expr(~ = un_op; ~ = atom; <Uop>)
-let fin_mul_expr(expr) := bop(mul_expr, mul_op, fin_mul_right(expr))
-
-add_op:
-  | PLUS { Add }
-  | MINUS { Sub }
-  | DPLUS { Cat }
-;
-let add_expr := bop(add_expr, add_op, mul_expr)
-let fin_add_expr(expr) := bop(add_expr, add_op, fin_mul_expr(expr))
-
-cmp_op:
-  | LANG { Lt }
-  | LEQ { Leq }
-  | RANG { Gt }
-  | GEQ { Geq }
-  | EQ { Eq }
-  | DIF { Dif }
-;
-let cmp_expr := bop(cmp_expr, cmp_op, add_expr)
-let fin_cmp_expr(expr) := bop(cmp_expr, cmp_op, fin_add_expr(expr))
-
-and_op:
-    AND { And }
-;
-let and_expr := bop(and_expr, and_op, cmp_expr)
-let fin_and_expr(expr) := bop(and_expr, and_op, fin_cmp_expr(expr))
-
-or_op:
-    OR { Or }
-;
-
-let or_expr := bop(or_expr, or_op, and_expr)
-let fin_or_expr(expr) := bop(or_expr, or_op, fin_and_expr(expr))
+  | loc_expr(~ = bop_expr; ~ = op; ~ = fin_expr(expr); <Bop>)
 
 let fn(expr) :=
     loc_expr(FN; f = funbody(expr); { let x, r, b = f in Fun (x, r, b) })
@@ -152,7 +135,7 @@ let fn(expr) :=
 let return(expr) := loc_expr(RETURN; ~ = expr; <Ret>)
 
 let wal_expr(expr) :=
-  | ~ = fin_or_expr(expr); <>
+  | ~ = fin_expr(expr); <>
   | loc_expr(~ = string_loc; WAL; ~ = expr; <Wal>)
 
 let no_dangling_expr :=
