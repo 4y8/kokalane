@@ -20,6 +20,9 @@
 %token DUMMY
 %start file
 %type <decl_loc list> file
+(* on se restreint à n'utiliser que peu les directives d'associativités car
+elles obfusquent les messages d'erreur, on peut trouver au commit #af5f189 une
+grammaire LR(1) sans directives pour petit koka *)
 %left OR
 %left AND
 %left EQ RANG LANG LEQ GEQ DIF
@@ -129,7 +132,7 @@ let fin_expr(expr) :=
   | loc_expr(~ = un_op; ~ = atom; <Uop>)
   | loc_expr(~ = bop_expr; ~ = op; ~ = fin_expr(expr); <Bop>)
 
-let fn(expr) :=
+let fn(expr) ==
     loc_expr(FN; f = funbody(expr); { let x, r, b = f in Fun (x, r, b) })
 
 let return(expr) := loc_expr(RETURN; ~ = expr; <Ret>)
