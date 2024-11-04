@@ -92,9 +92,19 @@ let atom :=
         { let b = {expr = Fun ([], None, b); loc = b.loc} in add_app f b }
   )
 
+let expr_blk :=
+  | ~ = block; <>
+  | loc_expr(IF; e = hi_expr; THEN; b = expr_blk; { If (e, b, empty_block) })
+  | loc_expr(IF; e = hi_expr; THEN; t = no_dangling_expr; ELSE; f = expr_blk; { If (e, t, f) })
+
+let atom_app_blk :=   
+  | loc_expr(a = atom; f = fn(expr_blk); { add_app a f })
+  | loc_expr(a = atom_app_blk; f = fn(expr_blk); { add_app a f })
+
 let atom_app(expr) :=
   | ~ = atom; <>
   | loc_expr(a = atom; f = fn(expr); { add_app a f })
+  | loc_expr(a = atom_app_blk; f = fn(expr); { add_app a f })
 
 un_op:
   | BANG { Not }
