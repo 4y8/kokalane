@@ -94,8 +94,13 @@ let atom :=
 
 let expr_blk :=
   | ~ = block; <>
-  | loc_expr(IF; e = hi_expr; THEN; b = expr_blk; { If (e, b, empty_block) })
-  | loc_expr(IF; e = hi_expr; THEN; t = no_dangling_expr; ELSE; f = expr_blk; { If (e, t, f) })
+  | loc_expr(
+    | IF; e = hi_expr; THEN; b = expr_blk; { If (e, b, empty_block) }
+    | IF; e = hi_expr; THEN; t = no_dangling_expr; ELSE; f = expr_blk;
+    { If (e, t, f) }
+    | IF; e = hi_expr; r = return(block); { If (e, r, empty_block) }
+  )
+  | ~ = return(block); <>
 
 let atom_app_blk :=   
   | loc_expr(a = atom; f = fn(expr_blk); { add_app a f })

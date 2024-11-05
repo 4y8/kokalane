@@ -25,54 +25,50 @@ let is_builtin_fun {expr; loc} = match expr with
     Var x when SSet.mem x builtin_fun -> x
   | _ -> ""
 
-let rec check_prop_type loc error pr = function
-    TVar r as t ->
-      begin match !r with
-        TVLink t -> check_prop_type loc error pr t
-      | _ -> error t
-      end
-  | t -> if not (pr t) then error t
+let rec remove_tvar = function
+    | TCon s -> TCon s, false
+    | TApp (s, t) ->
+        let t, has_free = remove_tvar t in
+        TApp (s, t), has_free
+    | TFun (arg, res, eff) ->
+        let res, has_free = remove_tvar res in
+        let arg, has_free' = List.map remove_tvar arg |> List.split in
+        TFun (arg, res, eff), List.fold_left (||) has_free has_free'
+    | TVar r ->
+        match !r with
+          TVLink t -> remove_tvar t
+        | TVUnbd _ -> TVar r, true
 
-let check_printable loc =
-  let pr = function
-      TCon "unit" | TCon "bool" | TCon "int" | TCon "string" -> true
-    | _ -> false
-  in
-  let error t =
-    print_endline (show_type_pure t);
+let check_printable loc t =
+  match fst (remove_tvar t) with
+      TCon "unit" | TCon "bool" | TCon "int" | TCon "string" -> ()
+    | _ ->
+       print_endline (show_type_pure t);
+       Error.error loc (fun fmt ->
+           Format.fprintf fmt "Tried to print %a which can't be printed"
+             Pprint.fmt_type t)
+
+let rec check_concatenable loc t =
+  match fst (remove_tvar t) with
+      TCon "string" | TApp ("list", _) -> ()
+    | _ -> 
+       Error.error loc (fun fmt ->
+           fprintf fmt "Tried to concatenate %a which is can't be \
+concatenated" Pprint.fmt_type t)
+
+let check_comparable loc t =
+  if fst (remove_tvar t) = TCon "int" then
     Error.error loc (fun fmt ->
-        Format.fprintf fmt "Tried to print %a which can't be printed"
-          Pprint.fmt_type t)
-  in check_prop_type loc error pr
-
-let rec check_concatenable loc =
-  let pr = function
-      TCon "string" | TApp ("list", _) -> true
-    | _ -> false
-  in
-  let error t = Error.error loc (fun fmt ->
-      fprintf fmt "Tried to concatenate %a which is can't be \
-                   concatenated" Pprint.fmt_type t)
-  in check_prop_type loc error pr
-
-let check_comparable loc =
-  let pr = (=) (TCon "int") in
-  let error t = Error.error loc (fun fmt ->
       fprintf fmt "Tried to compare %a which can't be compared"
         Pprint.fmt_type t)
-  in
-  check_prop_type loc error pr
 
-let check_equalable loc =
-  let pr = function
-      TCon "int" | TCon "bool" | TCon "string" -> true
-    | _ -> false
-  in
-  let error t = Error.error loc (fun fmt ->
-      fprintf fmt "Tried to check equality for %a which can't be compared"
-        Pprint.fmt_type t)
-  in
-  check_prop_type loc error pr
+let check_equalable loc t =
+  match fst (remove_tvar t) with
+      TCon "int" | TCon "bool" | TCon "string" -> ()
+    | _ ->
+       Error.error loc (fun fmt ->
+           fprintf fmt "Tried to check equality for %a which can't be compared"
+             Pprint.fmt_type t)
 
 exception Occurs
 
@@ -148,20 +144,6 @@ let type_of_lit = function
   | LUnit -> unit
 
 exception Polymorphism
-
-let rec remove_tvar = function
-    | TCon s -> TCon s, false
-    | TApp (s, t) ->
-        let t, has_free = remove_tvar t in
-        TApp (s, t), has_free
-    | TFun (arg, res, eff) ->
-        let res, has_free = remove_tvar res in
-        let arg, has_free' = List.map remove_tvar arg |> List.split in
-        TFun (arg, res, eff), List.fold_left (||) has_free has_free'
-    | TVar r ->
-        match !r with
-          TVLink t -> remove_tvar t
-        | TVUnbd _ -> TVar r, true
 
 let rec remove_tvar_expr {expr; ty} =
   let remove_tvar_stmt = function
