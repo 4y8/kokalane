@@ -1,4 +1,3 @@
-open Pprint
 open Infer
 open Eval
 

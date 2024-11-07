@@ -71,7 +71,6 @@ let neg = function
 
 let uop_assoc = [Neg, neg; Not, nt]
 
-
 let rec eval ctx {expr; ty} = match expr with
     Lit (LInt n) -> VInt n
   | Lit (LString s) -> VString s

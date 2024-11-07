@@ -5,6 +5,13 @@ open Format
 open Type
 open Error
 
+let merge_ctx =
+  SMap.merge (fun _ v1 v2 ->
+      match v1, v2 with
+        None, None -> None
+      | _, Some v -> Some v
+      | Some v, _ -> Some v)
+
 let rec infer ctx {expr; loc} = match expr with
     Lit l -> {expr = Lit l; ty = type_of_lit l}, no_effect
   | Var x ->
@@ -152,11 +159,7 @@ let rec infer ctx {expr; loc} = match expr with
           SMap.add x.string (t, false) mp
       in
       let arg_map = List.fold_left add_var SMap.empty arg in
-      let var = SMap.merge (fun _ v1 v2 ->
-          match v1, v2 with
-            None, None -> None
-          | _, Some v -> Some v
-          | Some v, _ -> Some v) ctx.var arg_map in
+      let var = merge_ctx ctx.var arg_map in
       let body, eff = check {ctx with var; ret_type = new_tvar ()} ret_type b in
       (match t with
         None -> ()
@@ -245,24 +248,21 @@ let check_decl var {name; arg; res; body} =
       SMap.add x.string (t, false) mp
   in
   let arg_map = List.fold_left add_var SMap.empty arg in
-  let var = SMap.merge (fun _ v1 v2 ->
-      match v1, v2 with
-        None, None -> None
-      | _, Some v -> Some v
-      | Some v, _ -> Some v) var arg_map in
+  let var = merge_ctx var arg_map in
   let body, eff = check {var; ret_type; rec_fun = name.string } ret_type body in
   let ret_type, poly = remove_tvar ret_type in
   if poly then
     Error.error_str name.loc
       (sprintf "Function %s has polymporphic type" name.string);
   let eff =
-    if !has_console = None then eff
-    else if !has_console = Some false then
+    match !has_console with
+      None -> eff
+    | Some false ->
       if ESet.mem EConsole (fst eff) then
         error_str name.loc @@
         sprintf "Function %s has console effect while it shouldn't" name.string
       else eff
-    else add_effect eff EConsole
+    | _ -> add_effect eff EConsole
   in
   let body = remove_tvar_expr body in
   let arg = List.map (fun (x, t) -> (x.string, t)) arg in
@@ -289,7 +289,7 @@ let check_file (p : decl_loc list) =
             if d.arg = [] then
               Some d
             else
-              error_str hd.name.loc "Function name takes no argument"
+              error_str hd.name.loc "Function main takes no argument"
           else main
         in
         let var = add_function var (hd.name, d.res) in
