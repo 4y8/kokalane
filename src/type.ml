@@ -4,7 +4,7 @@ open Syntax.Effect
 open Format
 
 type ctx =
-  { var : (type_pure * bool) SMap.t; ret_type : type_pure; rec_fun : string }
+  { var : (pure_type * bool) SMap.t; ret_type : pure_type; rec_fun : string }
 
 let valid_types =
   ["int", 0; "bool", 0; "unit", 0; "string", 0; "list", 1; "maybe", 1]
@@ -21,8 +21,8 @@ let builtin_fun =
   ["println"; "repeat"; "while"; "default"; "for"; "head"; "tail"]
   |> SSet.of_list
 
-let is_builtin_fun {expr; loc} = match expr with
-    Var x when SSet.mem x builtin_fun -> x
+let is_builtin_fun {sexpr; loc} = match sexpr with
+    SVar x when SSet.mem x builtin_fun -> x
   | _ -> ""
 
 let rec remove_tvar = function
@@ -41,9 +41,8 @@ let rec remove_tvar = function
 
 let check_printable loc t =
   match fst (remove_tvar t) with
-      TCon "unit" | TCon "bool" | TCon "int" | TCon "string" -> ()
+      TCon ("unit" as s) | TCon ("bool" as s) | TCon ("int" as s) | TCon ("string" as s) -> s
     | _ ->
-       print_endline (show_type_pure t);
        Error.error loc (fun fmt ->
            Format.fprintf fmt "Tried to print %a which can't be printed"
              Pprint.fmt_type t)
@@ -110,8 +109,8 @@ let tvar = ref 0
 let new_tvar () =
   incr tvar; TVar (ref (TVUnbd !tvar))
 
-let rec erase_type {ty; loc} = match ty with
-    TCon s ->
+let rec erase_type {stype; loc} = match stype with
+    STCon s ->
       begin match SMap.find_opt s valid_types with
         Some 0 -> TCon s
       | None ->
@@ -121,7 +120,7 @@ let rec erase_type {ty; loc} = match ty with
           sprintf "Type constructor %s expected %d constructors, got 0"
             s n
       end
-  | TApp ({string; loc}, t) ->
+  | STApp ({string; loc}, t) ->
       begin match SMap.find_opt string valid_types with
         Some 1 -> TApp (string, erase_type t)
       | None ->
@@ -132,10 +131,8 @@ let rec erase_type {ty; loc} = match ty with
           sprintf "Type constructor %s expected %d constructors, got 1"
             string n
       end
-  | TFun (l, t, e) ->
+  | STFun (l, t, e) ->
       TFun (List.map erase_type l, erase_type t, erase_effects e)
-  | TVar _ -> failwith "impossible" (* les types fournis par l'utilisateur ne contiennent pas de
-                    variable de type *)
 
 let type_of_lit = function
     LInt _ -> int
@@ -147,9 +144,9 @@ exception Polymorphism
 
 let rec remove_tvar_expr {expr; ty} =
   let remove_tvar_stmt = function
-      SExpr e -> SExpr (remove_tvar_expr e)
-    | SVal (x, e) -> SVal (x, remove_tvar_expr e)
-    | SVar (x, e) -> SVar (x, remove_tvar_expr e)
+      TExpr e -> TExpr (remove_tvar_expr e)
+    | TDVal (x, e) -> TDVal (x, remove_tvar_expr e)
+    | TDVar (x, e) -> TDVar (x, remove_tvar_expr e)
   in
   let expr = match expr with
       If (e, b1, b2) ->
@@ -162,9 +159,10 @@ let rec remove_tvar_expr {expr; ty} =
     | Lit l -> Lit l
     | App (f, x) -> App (remove_tvar_expr f, List.map remove_tvar_expr x)
     | Wal (x, e) -> Wal (x, remove_tvar_expr e)
-    | Fun (x, (), e) -> Fun (x, (), remove_tvar_expr e)
+    | Fun (x, e) -> Fun (x, remove_tvar_expr e)
     | Blk l -> Blk (List.map remove_tvar_stmt l)
     | Lst l -> Lst (List.map remove_tvar_expr l)
     | Uop (o, e) -> Uop (o, remove_tvar_expr e)
+    | Println (e, s) -> Println (remove_tvar_expr e, s)
   in
   {expr; ty = fst (remove_tvar ty)}

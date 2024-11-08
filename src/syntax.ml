@@ -1,19 +1,15 @@
 type bop =
     Add | Sub | Mul | Div | Mod | And | Or | Leq | Geq | Eq | Dif
   | Gt | Lt | Cat
-[@@deriving show]
 
 type uop = Neg | Not
-[@@deriving show]
 
 type lit =
     LUnit | LInt of int | LBool of bool | LString of string
-[@@deriving show]
 
-type loc = [%import: Lexing.position] [@@deriving show]
+type loc = Lexing.position
 
 type string_loc = { string : string ; loc : loc * loc }
-[@@deriving show]
 
 module SMap = Map.Make(String)
 module SSet = Set.Make(String)
@@ -28,60 +24,68 @@ end
 module ESet = Set.Make(Effect)
 module EMap = Map.Make(Effect)
 
-(* cette paramétrisation permet d'utiliser le même type avec ou sans les
-   annotations de position : 'a désigne le type des types, 'b celui des
-   constructeurs de type et 'c celui d'un ensemble d'effet *)
-type ('a, 'b, 'c) ty
-  = TCon of string | TApp of 'b * 'a
-  | TFun of 'a list * 'a * 'c | TVar of 'a tvar ref
-[@@deriving show]
-and 'a tvar =
-    TVUnbd of int | TVLink of 'a
+type surface_type_desc
+  = STCon of string | STApp of string_loc * surface_type
+  | STFun of surface_type list * surface_type * string_loc list
+and surface_type = { stype : surface_type_desc ; loc : loc * loc }
 
-type type_loc =
-  {ty : (type_loc, string_loc, string_loc list) ty; loc : loc * loc [@printer fun fmt t -> ()]}
-[@@deriving show]
+type pure_type
+  = TCon of string | TApp of string * pure_type
+  | TFun of pure_type list * pure_type * (ESet.t * bool option ref option)
+  | TVar of tvar ref
+and tvar =
+    TVUnbd of int | TVLink of pure_type
 
-type type_pure = (('a [@printer pp_type_pure], string, ESet.t * bool option ref option [@printer fun fmt t -> ()]) ty) as 'a
-[@@deriving show]
+type result = string_loc list * surface_type
 
-type ('a, 'b, 'c, 'd, 'e) expr
-  = If  of 'a * 'a * 'a
-  | Bop of 'a * bop * 'a
-  | Ret of 'a
+type surface_desc
+  = SIf  of surface_expr * surface_expr * surface_expr
+  | SBop of surface_expr * bop * surface_expr
+  | SRet of surface_expr
+  | SVar of string
+  | SLit of lit
+  | SApp of surface_expr * surface_expr list
+  | SWal of string_loc * surface_expr
+  | SFun of (string_loc * surface_type) list * result option * surface_expr
+  | SBlk of surface_stmt list
+  | SLst of surface_expr list
+  | SUop of uop * surface_expr
+and surface_expr =
+  { sexpr : surface_desc; loc : loc * loc }
+
+and surface_stmt_desc
+  = SExpr of surface_expr
+  | SDVar of string * surface_expr
+  | SDVal of string * surface_expr
+and surface_stmt =
+  {stmt : surface_stmt_desc; loc : loc * loc}
+
+type typed_desc
+  = If  of typed_expr * typed_expr * typed_expr
+  | Bop of typed_expr * bop * typed_expr
+  | Ret of typed_expr
   | Var of string
   | Lit of lit
-  | App of 'a * 'a list
-  | Wal of 'b * 'a
-  | Fun of ('b * 'd) list * 'e * 'a
-  | Blk of 'c list
-  | Lst of 'a list
-  | Uop of uop * 'a
-and expr_loc =
-  {expr : (expr_loc, string_loc, stmt_loc, type_loc, result option) expr; loc : loc * loc [@printer fun fmt t -> ()]}
-and result = string_loc list * type_loc
+  | App of typed_expr * typed_expr list
+  | Wal of string * typed_expr
+  | Fun of (string * pure_type) list * typed_expr
+  | Blk of typed_stmt list
+  | Lst of typed_expr list
+  | Uop of uop * typed_expr
+  | Println of typed_expr * string
 
-and 'a stmt
-  = SExpr of 'a
-  | SVar of string * 'a
-  | SVal of string * 'a
-and stmt_loc =
-  {stmt : expr_loc stmt; loc : loc * loc [@printer fun fmt t -> ()]}
-[@@deriving show]
+and typed_expr
+  = { expr : typed_desc; ty : pure_type }
 
-type expr_type =
-  {expr : (expr_type, string, stmt_type, type_pure, unit) expr ; ty : type_pure}
-
-and stmt_type = expr_type stmt
-[@@deriving show]
+and typed_stmt
+  = TExpr of typed_expr
+  | TDVar of string * typed_expr
+  | TDVal of string * typed_expr
 
 type ('a, 'b, 'c, 'd) decl =
   { name : 'd ; arg : ('d * 'b) list; res : 'c
   ; body : 'a }
-[@@deriving show]
 
-type decl_loc = (expr_loc, type_loc, result option, string_loc) decl
-[@@deriving show]
+type surface_decl = (surface_expr, surface_type, result option, string_loc) decl
 
-type decl_type = (expr_type, type_pure, type_pure, string) decl
-[@@deriving show]
+type decl_type = (typed_expr, typed_expr, pure_type, string) decl

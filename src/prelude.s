@@ -1,4 +1,4 @@
-.text
+	.text
 
 alloc:
 	pushq	%rbp
@@ -42,13 +42,36 @@ println_string:
 	ret
 
 int_div:
-	movq	8(%rsp), %rdi
+	movq	8(%rsp), %rax
+	cqto
 	movq	16(%rsp), %rsi
+	idivq	%rsi
+	testq	%rdx, 8(%rsp)
+	jns	.ret
+	sarq	$63, %rsi
+	orq	$1, %rsi
+	subq	%rsi, %rax
+.ret:
 	ret
 
-.data
+int_mod:
+	movq	8(%rsp), %rax
+	cqto
+	movq	16(%rsp), %rsi
+	idivq	%rsi
+	testq	%rdx, 8(%rsp)
+	movq	%rsi, %rdi
+	sarq	$63, %rdi
+	xorq	%rdi, %rsi
+	subq	%rdi, %rsi
+	addq	%rsi, %rdx
+.ret:
+	movq	%rdx, %rax
+	ret
+
+	.data
 int_format:
-.string "%d\n"	
+	.string "%d\n"
 
 unit_format:
-.string "()\n"
+	.string "()\n"

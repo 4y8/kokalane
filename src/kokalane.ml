@@ -1,5 +1,6 @@
 open Infer
 open Eval
+open Codegen
 
 let _ =
   let parse_only = ref false in

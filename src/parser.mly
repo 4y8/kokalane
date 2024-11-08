@@ -1,10 +1,10 @@
 %{
     open Syntax
-    let empty_block = {expr = Blk []; loc = Lexing.dummy_pos, Lexing.dummy_pos}
-    let add_app {expr; loc} x =
-      match expr with
-        App (g, y) -> App (g, y @ [x])
-      | e -> App ({expr; loc}, [x])
+    let empty_block = {sexpr = SBlk []; loc = Lexing.dummy_pos, Lexing.dummy_pos}
+    let add_app {sexpr; loc} x =
+      match sexpr with
+        SApp (g, y) -> SApp (g, y @ [x])
+      | e -> SApp ({sexpr; loc}, [x])
 %}
 
 %token ELSE FN FUN IF RETURN THEN VAL VAR
@@ -19,7 +19,7 @@
 %token TRUE FALSE
 %token DUMMY
 %start file
-%type <decl_loc list> file
+%type <surface_decl list> file
 (* on se restreint à n'utiliser que peu les directives d'associativités car
 elles obfusquent les messages d'erreur, on peut trouver au commit #af5f189 une
 grammaire LR(1) sans directives pour petit koka *)
@@ -32,7 +32,7 @@ grammaire LR(1) sans directives pour petit koka *)
 %%
 
 let loc_expr(expr) ==
-  ~ = expr; { { expr; loc = $startpos, $endpos } }
+  sexpr = expr; { { sexpr; loc = $startpos, $endpos } }
 
 let lit :=
   | ~ = INT; <LInt>
@@ -46,12 +46,12 @@ string_loc:
 ;
 
 atype_noloc:
-  | t = IDENT { TCon t }
-  | v = string_loc LANG t=ty RANG { TApp (v, t) }
+  | t = IDENT { STCon t }
+  | v = string_loc LANG t = ty RANG { STApp (v, t) }
 ;
 
 atype:
-  | ty = atype_noloc { {ty; loc = $startpos, $endpos} }
+  | stype = atype_noloc { { stype; loc = $startpos, $endpos } }
   | LPAR t = ty RPAR { t }
 ;
 
@@ -63,42 +63,41 @@ result:
 (* cette règle ne considère que des listes de 0, 2 ou plus types (i.e. tout sauf
 1) pour éviter des conflits avec le 3ème cas de atype *)
 tlist:
-  | t=ty COMMA l=separated_nonempty_list(COMMA, ty) { t :: l }
+  | t = ty COMMA l = separated_nonempty_list(COMMA, ty) { t :: l }
 ;
 
 ty_noloc:
-  | t = atype ARR r = result { let e, t' = r in TFun ([t], t', e) }
-  | LPAR t = tlist RPAR ARR r = result { let e, t' = r in TFun (t, t', e) }
-  | LPAR RPAR { TCon "unit" }
-  | LPAR RPAR ARR r = result { let e, t' = r in TFun ([], t', e) }
+  | t = atype ARR r = result { let e, t' = r in STFun ([t], t', e) }
+  | LPAR t = tlist RPAR ARR r = result { let e, t' = r in STFun (t, t', e) }
+  | LPAR RPAR { STCon "unit" }
+  | LPAR RPAR ARR r = result { let e, t' = r in STFun ([], t', e) }
 ;
 
 ty:
   | t = atype { t }
-  | ty = ty_noloc { {ty; loc = $startpos, $endpos} }
+  | stype = ty_noloc { { stype; loc = $startpos, $endpos} }
 ;
 
-let var := loc_expr (~=IDENT; <Var>)
+let var := loc_expr (~=IDENT; <SVar>)
 
 let atom :=
   | LPAR; e = expr; RPAR; <>
   | e = var; <>
   | loc_expr(
-      | ~ = lit; <Lit>
-      | LSQU; ~ = separated_list(COMMA, expr); RSQU; <Lst>
-      | ~ = atom; LPAR; ~ = separated_list(COMMA, expr); RPAR; <App>
-      | x = atom; DOT; f = var; { App (f, [x]) }
+      | ~ = lit; <SLit>
+      | LSQU; ~ = separated_list(COMMA, expr); RSQU; <SLst>
+      | ~ = atom; LPAR; ~ = separated_list(COMMA, expr); RPAR; <SApp>
+      | x = atom; DOT; f = var; { SApp (f, [x]) }
       | f = atom; b = block;
-        { let b = {expr = Fun ([], None, b); loc = b.loc} in add_app f b }
+        { let b = {sexpr = SFun ([], None, b); loc = b.loc} in add_app f b }
   )
 
 let expr_blk :=
   | ~ = block; <>
   | loc_expr(
-    | IF; e = hi_expr; THEN; b = expr_blk; { If (e, b, empty_block) }
-    | IF; e = hi_expr; THEN; t = no_dangling_expr; ELSE; f = expr_blk;
-    { If (e, t, f) }
-    | IF; e = hi_expr; r = return(block); { If (e, r, empty_block) }
+    | IF; e = hi_expr; THEN; b = expr_blk; { SIf (e, b, empty_block) }
+    | IF; e = hi_expr; THEN; t = no_dangling_expr; ELSE; f = expr_blk; <SIf>
+    | IF; e = hi_expr; r = return(block); { SIf (e, r, empty_block) }
   )
   | ~ = return(block); <>
 
@@ -117,7 +116,7 @@ un_op:
 ;
 
 let un_expr :=
-  | loc_expr(~ = un_op; ~ = atom; <Uop>)
+  | loc_expr(~ = un_op; ~ = atom; <SUop>)
   | ~ = atom; <>
 
 let op ==
@@ -138,37 +137,37 @@ let op ==
 
 let bop_expr :=
   | ~ = un_expr; <>
-  | loc_expr(l = bop_expr; o = op; r = bop_expr; <Bop>)
+  | loc_expr(l = bop_expr; o = op; r = bop_expr; <SBop>)
 
 let fin_expr(expr) :=
   | ~ = atom_app(expr); <>
   | ~ = fn(expr); <>
   | ~ = return(expr); <>
-  | loc_expr(~ = un_op; ~ = atom; <Uop>)
-  | loc_expr(~ = bop_expr; ~ = op; ~ = fin_expr(expr); <Bop>)
+  | loc_expr(~ = un_op; ~ = atom; <SUop>)
+  | loc_expr(~ = bop_expr; ~ = op; ~ = fin_expr(expr); <SBop>)
 
 let fn(expr) ==
-    loc_expr(FN; f = funbody(expr); { let x, r, b = f in Fun (x, r, b) })
+    loc_expr(FN; f = funbody(expr); { let x, r, b = f in SFun (x, r, b) })
 
-let return(expr) := loc_expr(RETURN; ~ = expr; <Ret>)
+let return(expr) := loc_expr(RETURN; ~ = expr; <SRet>)
 
 let wal_expr(expr) :=
   | ~ = fin_expr(expr); <>
-  | loc_expr(~ = string_loc; WAL; ~ = expr; <Wal>)
+  | loc_expr(~ = string_loc; WAL; ~ = expr; <SWal>)
 
 let no_dangling_expr :=
   | ~ = wal_expr(no_dangling_expr); <>
   | ~ = block; <>
   | loc_expr(
       IF; ~ = hi_expr; THEN; t = no_dangling_expr; ELSE; f = no_dangling_expr;
-          <If>)
+          <SIf>)
 
 let if_expr :=
   | ~ = wal_expr(expr); <>
   | loc_expr(
-    | IF; ~ = hi_expr; THEN; ~ = no_dangling_expr; ELSE; ~ = expr; <If>
-    | IF; c = hi_expr; THEN; e = expr; { If (c, e, empty_block) }
-    | IF; c = hi_expr; r = return(expr); { If (c, r, empty_block) }
+    | IF; ~ = hi_expr; THEN; ~ = no_dangling_expr; ELSE; ~ = expr; <SIf>
+    | IF; c = hi_expr; THEN; e = expr; { SIf (c, e, empty_block) }
+    | IF; c = hi_expr; r = return(expr); { SIf (c, r, empty_block) }
   )
 
 hi_expr:
@@ -181,8 +180,8 @@ expr:
 ;
 
 stmt_noloc:
-  | VAL x = IDENT ASS l = expr SCOL+ { SVal (x, l) }
-  | VAR x = IDENT WAL l = expr SCOL+ { SVar (x, l) }
+  | VAL x = IDENT ASS l = expr SCOL+ { SDVal (x, l) }
+  | VAR x = IDENT WAL l = expr SCOL+ { SDVar (x, l) }
 ;
 
 sexpr:
@@ -201,8 +200,8 @@ stmt_list:
 
 let block :=
     loc_expr(
-    | LCUR; SCOL*; l = stmt_list; { Blk l }
-    | LCUR; SCOL*; RCUR; {Blk []}
+    | LCUR; SCOL*; l = stmt_list; { SBlk l }
+    | LCUR; SCOL*; RCUR; {SBlk []}
   )
 
 ann:

@@ -62,17 +62,17 @@ let bop_assoc =
    Geq, geq; Eq, eq; Dif, dif; Sub, sub]
 
 let nt = function
-    VBool b -> VBool (not b)
+  | VBool b -> VBool (not b)
   | _ -> failwith "impossible"
 
 let neg = function
-    VInt n -> VInt (-n)
+  | VInt n -> VInt (-n)
   | _ -> failwith "impossible"
 
 let uop_assoc = [Neg, neg; Not, nt]
 
 let rec eval ctx {expr; ty} = match expr with
-    Lit (LInt n) -> VInt n
+  | Lit (LInt n) -> VInt n
   | Lit (LString s) -> VString s
   | Lit (LBool b) -> VBool b
   | Lit (LUnit) -> VUnit
@@ -91,16 +91,16 @@ let rec eval ctx {expr; ty} = match expr with
   | Bop (e1, op, e2) ->
       List.assoc op bop_assoc (eval ctx e1) (eval ctx e2)
   | Var x -> !(SMap.find x ctx)
+  | Println (e, _) ->
+     begin match eval ctx e with
+     | VInt n -> Printf.printf "%d\n" n
+     | VString s -> Printf.printf "%s\n" s
+     | VUnit -> Printf.printf "()\n"
+     | VBool b -> Printf.printf "%s\n" (if b then "True" else "False")
+     | _ -> failwith "impossible"
+     end; VUnit
   | App ({expr=Var x; ty=_}, arg) when SSet.mem x builtin_fun ->
       begin match x, arg with
-        "println", [e] ->
-          begin match eval ctx e with
-            VInt n -> Printf.printf "%d\n" n
-          | VString s -> Printf.printf "%s\n" s
-          | VUnit -> Printf.printf "()\n"
-          | VBool b -> Printf.printf "%s\n" (if b then "True" else "False")
-          | _ -> failwith "impossible"
-          end; VUnit
       | "head", [e] ->
           begin match eval ctx e with
             VList [] -> VNone
@@ -158,7 +158,7 @@ let rec eval ctx {expr; ty} = match expr with
       | _ -> failwith "impossible"
       end
   | Lst l -> VList (List.map (eval ctx) l)
-  | Fun (arg, _, body) ->
+  | Fun (arg, body) ->
       VClo
         (fun l ->
            let ctx = List.fold_left2 (fun ctx (x, _) v -> SMap.add x (ref v) ctx) ctx arg l in
@@ -171,10 +171,10 @@ let rec eval ctx {expr; ty} = match expr with
 
 and eval_blk ctx = function
     [] -> VUnit
-  | [SExpr e] -> eval ctx e
-  | SExpr e :: tl -> ignore (eval ctx e); eval_blk ctx tl
-  | SVal (x, e) :: tl
-  | SVar (x, e) :: tl ->
+  | [TExpr e] -> eval ctx e
+  | TExpr e :: tl -> ignore (eval ctx e); eval_blk ctx tl
+  | TDVal (x, e) :: tl
+  | TDVar (x, e) :: tl ->
       eval_blk (SMap.add x (ref (eval ctx e)) ctx) tl
 
 let eval_file pt main =
@@ -183,7 +183,7 @@ let eval_file pt main =
     | hd :: tl ->
         let r = ref VUnit in
         let ctx = SMap.add hd.name r ctx in
-        let v = eval ctx {expr = Fun (hd.arg, (), hd.body); ty = TCon "unit"} in
+        let v = eval ctx {expr = Fun (hd.arg, hd.body); ty = TCon "unit"} in
         r := v;
         loop ctx tl
   in

@@ -1,6 +1,3 @@
-
-
-
 (** {0 Bibliothèque pour l'écriture de programmes X86-64 }
 
     Il s'agit là uniquement d'un fragment relativement petit
