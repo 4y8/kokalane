@@ -1,10 +1,12 @@
 	.text
+	.globl println_int
+	.globl println_string
 
 alloc:
 	pushq	%rbp
 	movq	%rsp, %rbp
 	andq	$-16, %rsp
-	movq	24(%rsp), %rdi
+	movq	24(%rbp), %rdi
 	call	malloc
 	movq	%rbp, %rsp
 	popq	%rbp
@@ -14,8 +16,9 @@ println_int:
 	pushq	%rbp
 	movq	%rsp, %rbp
 	andq	$-16, %rsp
-	movq	int_format, %rdi
-	movq	24(%rsp), %rsi
+	movq	$int_format, %rdi
+	movq	16(%rbp), %rsi
+        xorq    %rax, %rax
 	call	printf
 	movq	%rbp, %rsp
 	popq	%rbp
@@ -25,7 +28,7 @@ println_unit:
 	pushq	%rbp
 	movq	%rsp, %rbp
 	andq	$-16, %rsp
-	movq	unit_format, %rdi
+	movq	$unit_format, %rdi
 	call	printf
 	movq	%rbp, %rsp
 	popq	%rbp
@@ -35,7 +38,7 @@ println_string:
 	pushq	%rbp
 	movq	%rsp, %rbp
 	andq	$-16, %rsp
-	movq	24(%rsp), %rdi
+	movq	24(%rbp), %rdi
 	call	puts
 	movq	%rbp, %rsp
 	popq	%rbp
@@ -47,11 +50,11 @@ int_div:
 	movq	16(%rsp), %rsi
 	idivq	%rsi
 	testq	%rdx, 8(%rsp)
-	jns	.ret
+	jns	.ret1
 	sarq	$63, %rsi
 	orq	$1, %rsi
 	subq	%rsi, %rax
-.ret:
+.ret1:
 	ret
 
 int_mod:
@@ -60,12 +63,13 @@ int_mod:
 	movq	16(%rsp), %rsi
 	idivq	%rsi
 	testq	%rdx, 8(%rsp)
+	jns	.ret2
 	movq	%rsi, %rdi
 	sarq	$63, %rdi
 	xorq	%rdi, %rsi
 	subq	%rdi, %rsi
 	addq	%rsi, %rdx
-.ret:
+.ret2:
 	movq	%rdx, %rax
 	ret
 

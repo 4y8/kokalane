@@ -17,7 +17,6 @@ let _ =
           Error.error_str_lexbuf lexbuf (Printf.sprintf "Unexpected token: \"%s\""
                                            (Lexing.lexeme lexbuf))
     in
-    (* List.iter (fun d -> print_endline (Syntax.show_decl_loc d)) p; *)
     if !parse_only then exit 0;
     let pt, main =
       try
@@ -25,8 +24,8 @@ let _ =
       with
         NoMain -> Error.error_str_lexbuf lexbuf "Missing main function"
     in
-    (* List.iter (fun d -> print_endline (Syntax.show_decl_type d)) pt; *)
     if !type_only then exit 0;
+    X86_64.print_in_file ~file:"out.s" (Codegen.gen_prog (pt, main));
     eval_file pt main
   in
   Arg.parse ["--parse-only", Arg.Set parse_only, "Stop after parsing";
