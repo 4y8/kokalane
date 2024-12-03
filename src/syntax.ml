@@ -33,8 +33,7 @@ type pure_type
   = TCon of string | TApp of string * pure_type
   | TFun of pure_type list * pure_type * (ESet.t * bool option ref option)
   | TVar of tvar ref
-and tvar =
-    TVUnbd of int | TVLink of pure_type
+and tvar = TVUnbd of int | TVLink of pure_type
 
 type result = string_loc list * surface_type
 
@@ -72,7 +71,6 @@ type typed_desc
   | Blk of typed_stmt list
   | Lst of typed_expr list
   | Uop of uop * typed_expr
-  | Println of typed_expr * string
 
 and typed_expr
   = { expr : typed_desc; ty : pure_type }
@@ -81,6 +79,32 @@ and typed_stmt
   = TExpr of typed_expr
   | TDVar of string * typed_expr
   | TDVal of string * typed_expr
+
+type variable
+  = VGlo of string
+  | VLoc of int * bool
+  | VClo of int * bool
+
+type annot_desc
+  = AIf  of annot_expr * annot_expr * annot_expr
+  | ABop of annot_expr * bop * annot_expr
+  | ARet of annot_expr
+  | AVar of variable
+  | ALit of lit
+  | AApp of annot_expr * annot_expr list
+  | AWal of variable * annot_expr
+  | AClo of variable list * string
+  | ABlk of annot_stmt list
+  | ALst of annot_expr list
+  | AUop of uop * annot_expr
+
+and annot_expr
+  = { aexpr : annot_desc; aty : pure_type }
+
+and annot_stmt
+  = AExpr of annot_expr
+  | ADVar of int * annot_expr
+  | ADVal of int * annot_expr
 
 type ('a, 'b, 'c, 'd) decl =
   { name : 'd ; arg : ('d * 'b) list; res : 'c

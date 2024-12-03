@@ -97,7 +97,7 @@ let expr_blk :=
   | loc_expr(
     | IF; e = hi_expr; THEN; b = expr_blk; { SIf (e, b, empty_block) }
     | IF; e = hi_expr; THEN; t = no_dangling_expr; ELSE; f = expr_blk; <SIf>
-    | IF; e = hi_expr; r = return(block); { SIf (e, r, empty_block) }
+    | IF; e = hi_expr; r = return(expr_blk); { SIf (e, r, empty_block) }
   )
   | ~ = return(block); <>
 

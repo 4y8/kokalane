@@ -26,7 +26,6 @@ let _ =
     in
     if !type_only then exit 0;
     X86_64.print_in_file ~file:"out.s" (Codegen.gen_prog (pt, main));
-    eval_file pt main
   in
   Arg.parse ["--parse-only", Arg.Set parse_only, "Stop after parsing";
              "--type-only", Arg.Set type_only, "Stop after type checking"]

@@ -2,17 +2,17 @@
 	.globl println_int
 	.globl println_string
 
-alloc:
+kokalloc:
 	pushq	%rbp
 	movq	%rsp, %rbp
 	andq	$-16, %rsp
-	movq	24(%rbp), %rdi
+	movq	16(%rbp), %rdi
 	call	malloc
 	movq	%rbp, %rsp
 	popq	%rbp
 	ret
 
-println_int:
+.fun_println_int:
 	pushq	%rbp
 	movq	%rsp, %rbp
 	andq	$-16, %rsp
@@ -24,30 +24,31 @@ println_int:
 	popq	%rbp
 	ret
 
-println_unit:
+.fun_println_unit:
 	pushq	%rbp
 	movq	%rsp, %rbp
 	andq	$-16, %rsp
 	movq	$unit_format, %rdi
+        xorq    %rax, %rax
 	call	printf
 	movq	%rbp, %rsp
 	popq	%rbp
 	ret
 
-println_string:
+.fun_println_string:
 	pushq	%rbp
 	movq	%rsp, %rbp
 	andq	$-16, %rsp
-	movq	24(%rbp), %rdi
+	movq	16(%rbp), %rdi
 	call	puts
 	movq	%rbp, %rsp
 	popq	%rbp
 	ret
 
 int_div:
-	movq	8(%rsp), %rax
+	movq	16(%rsp), %rax
 	cqto
-	movq	16(%rsp), %rsi
+	movq	24(%rsp), %rsi
 	idivq	%rsi
 	testq	%rdx, 8(%rsp)
 	jns	.ret1
@@ -58,9 +59,9 @@ int_div:
 	ret
 
 int_mod:
-	movq	8(%rsp), %rax
+	movq	16(%rsp), %rax
 	cqto
-	movq	16(%rsp), %rsi
+	movq	24(%rsp), %rsi
 	idivq	%rsi
 	testq	%rdx, 8(%rsp)
 	jns	.ret2
@@ -79,3 +80,9 @@ int_format:
 
 unit_format:
 	.string "()\n"
+
+println_string:
+	.quad .fun_println_string
+
+println_int:
+	.quad .fun_println_int

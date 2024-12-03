@@ -5,13 +5,6 @@ open Format
 open Type
 open Error
 
-let merge_ctx =
-  SMap.merge (fun _ v1 v2 ->
-      match v1, v2 with
-        None, None -> None
-      | _, Some v -> Some v
-      | Some v, _ -> Some v)
-
 let rec infer ctx {sexpr; loc} = match sexpr with
     SLit l -> {expr = Lit l; ty = type_of_lit l}, no_effect
   | SVar x ->
@@ -40,7 +33,8 @@ let rec infer ctx {sexpr; loc} = match sexpr with
         "println", [e] ->
           let e, eff = infer ctx e in
           let t = check_printable loc e.ty in
-          {expr = Println (e, t); ty = unit},
+          let pr_type = TFun ([TCon t], unit, add_effect no_effect EConsole) in
+          {expr = App ({expr = Var ("println_" ^ t) ; ty = pr_type}, [e]); ty = unit},
           add_effect eff EConsole
       | "default", [e; e'] ->
           let e', eff' = infer ctx e' in
@@ -263,7 +257,6 @@ let check_decl var {name; arg; res; body} =
       else eff
     | _ -> add_effect eff EConsole
   in
-  let body = remove_tvar_expr body in
   let arg = List.map (fun (x, t) -> (x.string, t)) arg in
   if res <> None then
     if not ESet.(equal (fst eff) (fst ret_eff)) then
@@ -280,23 +273,21 @@ let check_file (p : surface_decl list) =
     else
       SMap.add x.string (t, false) mp
   in
-  let rec check_file main var = function
+  let rec check_file has_main var = function
     | hd :: tl ->
         let d = check_decl var hd in
-        let main =
+        let has_main =
           if d.name = "main" then
             if d.arg = [] then
-              Some d
+              true
             else
               error_str hd.name.loc "Function main takes no argument"
-          else main
+          else has_main
         in
         let var = add_function var (hd.name, d.res) in
-        let l, main = check_file main var tl in
-        d :: l, main
+        d :: check_file has_main var tl
     | [] ->
-        match main with
-          None -> raise NoMain
-        | Some main -> [], main
+        if has_main then [] else
+          raise NoMain
   in
-  check_file None SMap.empty p
+  check_file false SMap.empty p

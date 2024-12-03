@@ -6,6 +6,13 @@ open Format
 type ctx =
   { var : (pure_type * bool) SMap.t; ret_type : pure_type; rec_fun : string }
 
+let merge_ctx c1 c2 =
+  SMap.merge (fun _ v1 v2 ->
+      match v1, v2 with
+        None, None -> None
+      | _, Some v -> Some v
+      | Some v, _ -> Some v) c1 c2
+
 let valid_types =
   ["int", 0; "bool", 0; "unit", 0; "string", 0; "list", 1; "maybe", 1]
   |> List.to_seq |> SMap.of_seq
@@ -22,7 +29,7 @@ let builtin_fun =
   |> SSet.of_list
 
 let is_builtin_fun {sexpr; loc} = match sexpr with
-    SVar x when SSet.mem x builtin_fun -> x
+  | SVar x when SSet.mem x builtin_fun -> x
   | _ -> ""
 
 let rec remove_tvar = function
@@ -72,7 +79,7 @@ let check_equalable loc t =
 exception Occurs
 
 let rec check_occurs x = function
-    TCon _ -> ()
+  | TCon _ -> ()
   | TApp (_, t) -> check_occurs x t
   | TFun (arg, res, _) ->
       List.iter (check_occurs x) arg;
@@ -84,7 +91,7 @@ let rec check_occurs x = function
       | _ -> ()
 
 let rec eqtype  ?(check_effect=true) t t' = match t, t' with
-    TCon s, TCon s' -> s = s'
+  | TCon s, TCon s' -> s = s'
   | TApp (f, t), TApp (f', t') -> f = f' && eqtype t t' ~check_effect
   | TFun (arg, res, eff), TFun (arg', res', eff') ->
       begin try
@@ -110,7 +117,7 @@ let new_tvar () =
   incr tvar; TVar (ref (TVUnbd !tvar))
 
 let rec erase_type {stype; loc} = match stype with
-    STCon s ->
+  | STCon s ->
       begin match SMap.find_opt s valid_types with
         Some 0 -> TCon s
       | None ->
@@ -135,34 +142,7 @@ let rec erase_type {stype; loc} = match stype with
       TFun (List.map erase_type l, erase_type t, erase_effects e)
 
 let type_of_lit = function
-    LInt _ -> int
+  | LInt _ -> int
   | LBool _ -> bool
   | LString _ -> string
   | LUnit -> unit
-
-exception Polymorphism
-
-let rec remove_tvar_expr {expr; ty} =
-  let remove_tvar_stmt = function
-      TExpr e -> TExpr (remove_tvar_expr e)
-    | TDVal (x, e) -> TDVal (x, remove_tvar_expr e)
-    | TDVar (x, e) -> TDVar (x, remove_tvar_expr e)
-  in
-  let expr = match expr with
-      If (e, b1, b2) ->
-        If (remove_tvar_expr e, remove_tvar_expr b1, remove_tvar_expr b2)
-    | Bop (e, op, e') ->
-        Bop (remove_tvar_expr e, op, remove_tvar_expr e')
-    | Ret e ->
-        Ret (remove_tvar_expr e)
-    | Var x -> Var x
-    | Lit l -> Lit l
-    | App (f, x) -> App (remove_tvar_expr f, List.map remove_tvar_expr x)
-    | Wal (x, e) -> Wal (x, remove_tvar_expr e)
-    | Fun (x, e) -> Fun (x, remove_tvar_expr e)
-    | Blk l -> Blk (List.map remove_tvar_stmt l)
-    | Lst l -> Lst (List.map remove_tvar_expr l)
-    | Uop (o, e) -> Uop (o, remove_tvar_expr e)
-    | Println (e, s) -> Println (remove_tvar_expr e, s)
-  in
-  {expr; ty = fst (remove_tvar ty)}
