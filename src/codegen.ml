@@ -33,6 +33,31 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
       a1 ++ pushq !%rax ++ a2 ++ popq rsi ++ movq !%rax !%rdi ++
       xorl !%eax !%eax ++ cmpq !%rdi !%rsi ++ (List.assoc op cmp_op) !%al,
       d1 ++ d2
+  | ABop (e1, And, e2) ->
+      let a1, d1 = gen_expr ret e1 in
+      let a2, d2 = gen_expr ret e2 in
+      let lazy_branch = new_label () in
+      a1 ++ testq !%rax !%rax ++ jz lazy_branch ++ a2
+        ++ label lazy_branch, d1 ++ d2
+  | ABop (e1, Or, e2) ->
+      let a1, d1 = gen_expr ret e1 in
+      let a2, d2 = gen_expr ret e2 in
+      let lazy_branch = new_label () in
+      a1 ++ testq !%rax !%rax ++ jnz lazy_branch ++ a2
+        ++ label lazy_branch, d1 ++ d2
+  | ABop (e1, Eq, e2) ->
+      let a1, d1 = gen_expr ret e1 in
+      let a2, d2 = gen_expr ret e2 in
+      let a = match aty with
+        | TCon "string" -> call "streq"
+        | _ (* bool ou int *) ->
+            xorl !%eax !%eax ++ cmpq !%rdi !%rsi ++ sete !%al
+      in
+      a1 ++ pushq !%rax ++ a2 ++ popq rsi ++ movq !%rax !%rdi ++ a,
+      d1 ++ d2
+  | ABop (e1, Dif, e2) ->
+      let a, d = gen_expr ret ({aexpr = ABop (e1, Eq, e2); aty}) in
+      a ++ xorq (imm 1) !%rax, d
   | ABlk l -> gen_blk ret l
   | AIf (c, t, f) ->
       let ac, dc = gen_expr ret c in
@@ -49,7 +74,9 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
       let af, df = gen_expr ret f in
       let al, dl = List.map (gen_expr ret) l |> List.split in
       let d = List.fold_left (++) df dl in
-      let al = List.fold_left (fun code aarg -> aarg ++ pushq !%rax ++ code) nop al in
+      let al = List.fold_left
+          (fun code aarg -> aarg ++ pushq !%rax ++ code) nop al
+      in
       pushq !%r12 ++ af ++ movq !%rax !%r12 ++ al ++ call_star (ind r12) ++
       addq (imm (8 * List.length l)) !%rsp ++ popq r12, d
   | AWal (x, e) ->
@@ -61,7 +88,7 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
             a ++ movq (ind ~ofs rbp) !%r13 ++ movq !%rax (ind r13)
         | _ -> failwith "impossible"
       in 
-      a, d
+      a ++ xorq !%rax !%rax, d (* x := e renvoie () *)
   | AClo (l, f) ->
       let n = List.length l in
       let load_var i = function
@@ -87,6 +114,22 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
         | VClo (n, true) ->
             movq (ind ~ofs:(n + 8) r12) !%rax ++ movq (ind rax) !%rax
       in a, nop
+  | ALst l ->
+      let rec gen_lst = function
+          [] -> xorq !%rax !%rax, nop
+        | hd :: tl ->
+            let a, d = gen_expr ret hd in
+            let atl, dtl = gen_lst l in
+            atl ++ movq !%rax !%r13 ++ a ++ movq !%rax !%r14 ++
+            movq (imm 16) !%rdi ++ call "kokalloc" ++ movq !%r14 (ind rax) ++
+            movq !%r13 (ind ~ofs:8 rax), d ++ dtl
+      in gen_lst l
+  | AUop (op, e) ->
+      let a, d = gen_expr ret e in
+      let a = match op with
+        | Neg -> a ++ negq !%rax
+        | Not -> a ++ xorq (imm 1) !%rax
+      in a, d
 
 and gen_blk ret = function
   | [] -> nop, nop
@@ -104,6 +147,3 @@ and gen_blk ret = function
             movq !%r13 (ind rax) ++ movq !%rax (ind ~ofs rbp), d
       in
       a ++ atl, d ++ dtl
-
-let gen_fun (f, e, max_var) =
-  let e, data = 

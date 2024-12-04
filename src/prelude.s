@@ -18,7 +18,7 @@ kokalloc:
 	andq	$-16, %rsp
 	movq	$int_format, %rdi
 	movq	16(%rbp), %rsi
-        xorq    %rax, %rax
+	xorq	%rax, %rax
 	call	printf
 	movq	%rbp, %rsp
 	popq	%rbp
@@ -29,7 +29,7 @@ kokalloc:
 	movq	%rsp, %rbp
 	andq	$-16, %rsp
 	movq	$unit_format, %rdi
-        xorq    %rax, %rax
+	xorq	%rax, %rax
 	call	printf
 	movq	%rbp, %rsp
 	popq	%rbp
@@ -72,6 +72,52 @@ int_mod:
 	addq	%rsi, %rdx
 .ret2:
 	movq	%rdx, %rax
+	ret
+
+kk_streq:
+	xorl	%eax, %eax
+.loop1:
+	movb	(%rax, %rdi), %cl
+	movb	(%rax, %rdi), %dl
+	testb	%dl, %dl
+	jz	.ret3
+	testb	%cl, %cl
+	jz	.ret3
+	incq	%rax
+	cmpb	%cl, %dl
+	je	.loop1
+	xorl	%eax, %eax
+	ret
+.ret3:
+	xorl	%eax, %eax
+	cmpb	%cl, %dl
+	sete	%al
+	ret
+
+lstcat:
+	testq	%rdi, %rdi
+	jz	.ret4
+	movq	%rdi, %rax
+.loop2:
+	movq	8(%rdi), %r13
+	testq	%r13, %r13
+	jz	.ret5
+	movq	8(%rdi), %rdi
+	jmp	loop2
+.ret4:
+	movq	%rsi, %rax
+	ret
+.ret5:
+	movq	%rsi, 8(%rdi)
+	ret
+
+kk_strcat:
+	pushq	%rbp
+	movq	%rsp, %rbp
+	andq	$-16, %rsp
+	call	strcat
+	movq	%rbp, %rsp
+	popq	%rbp
 	ret
 
 	.data

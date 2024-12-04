@@ -22,7 +22,6 @@ end = struct
   let compare = compare
 end
 module ESet = Set.Make(Effect)
-module EMap = Map.Make(Effect)
 
 type surface_type_desc
   = STCon of string | STApp of string_loc * surface_type

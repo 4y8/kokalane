@@ -33,8 +33,8 @@ let rec infer ctx {sexpr; loc} = match sexpr with
         "println", [e] ->
           let e, eff = infer ctx e in
           let t = check_printable loc e.ty in
-          let pr_type = TFun ([TCon t], unit, add_effect no_effect EConsole) in
-          {expr = App ({expr = Var ("println_" ^ t) ; ty = pr_type}, [e]); ty = unit},
+          let pr_type = TFun ([e.ty], unit, add_effect no_effect EConsole) in
+          {expr = App ({expr = Var t ; ty = pr_type}, [e]); ty = unit},
           add_effect eff EConsole
       | "default", [e; e'] ->
           let e', eff' = infer ctx e' in

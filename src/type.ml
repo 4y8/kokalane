@@ -48,16 +48,16 @@ let rec remove_tvar = function
 
 let check_printable loc t =
   match fst (remove_tvar t) with
-      TCon ("unit" as s) | TCon ("bool" as s) | TCon ("int" as s) | TCon ("string" as s) -> s
-    | _ ->
+  | TCon (("unit" | "bool" | "int" | "string") as s) ->  "println_" ^ s
+  | _ ->
        Error.error loc (fun fmt ->
-           Format.fprintf fmt "Tried to print %a which can't be printed"
-             Pprint.fmt_type t)
+          Format.fprintf fmt "Tried to print %a which can't be printed"
+            Pprint.fmt_type t)
 
 let rec check_concatenable loc t =
   match fst (remove_tvar t) with
-      TCon "string" | TApp ("list", _) -> ()
-    | _ -> 
+  | TCon "string" | TApp ("list", _) -> ()
+  | _ -> 
        Error.error loc (fun fmt ->
            fprintf fmt "Tried to concatenate %a which is can't be \
 concatenated" Pprint.fmt_type t)
@@ -127,9 +127,11 @@ let rec erase_type {stype; loc} = match stype with
           sprintf "Type constructor %s expected %d constructors, got 0"
             s n
       end
+  | STFun (l, t, e) ->
+      TFun (List.map erase_type l, erase_type t, erase_effects e)
   | STApp ({string; loc}, t) ->
-      begin match SMap.find_opt string valid_types with
-        Some 1 -> TApp (string, erase_type t)
+      match SMap.find_opt string valid_types with
+      | Some 1 -> TApp (string, erase_type t)
       | None ->
           Error.error_str loc @@
           sprintf "Unknown type constructor: %s" string
@@ -137,9 +139,6 @@ let rec erase_type {stype; loc} = match stype with
           Error.error_str loc @@
           sprintf "Type constructor %s expected %d constructors, got 1"
             string n
-      end
-  | STFun (l, t, e) ->
-      TFun (List.map erase_type l, erase_type t, erase_effects e)
 
 let type_of_lit = function
   | LInt _ -> int
