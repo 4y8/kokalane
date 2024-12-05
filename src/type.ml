@@ -63,7 +63,7 @@ let rec check_concatenable loc t =
 concatenated" Pprint.fmt_type t)
 
 let check_comparable loc t =
-  if fst (remove_tvar t) = TCon "int" then
+  if fst (remove_tvar t) <> TCon "int" then
     Error.error loc (fun fmt ->
       fprintf fmt "Tried to compare %a which can't be compared"
         Pprint.fmt_type t)

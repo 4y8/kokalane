@@ -23,8 +23,8 @@
      DIF; AND; OR; LPAR; LCUR] |> TSet.of_list
 
   let beg_con =
-    [PLUS; MINUS; TIMES; DIV; MOD; DPLUS; LANG; RANG; LEQ; GEQ; EQ; DIF; AND; OR;
-     THEN; ELSE; RPAR; RCUR; COMMA; ARR; LCUR; ASS; DOT; WAL] |> TSet.of_list
+    [PLUS; MINUS; TIMES; DIV; MOD; DPLUS; LANG; RANG; LEQ; GEQ; EQ; DIF; AND;
+    OR; THEN; ELSE; RPAR; RCUR; COMMA; ARR; LCUR; ASS; DOT; WAL] |> TSet.of_list
 
   let q = Queue.create ()
 
@@ -79,7 +79,11 @@ let lowerl = ['a'-'z']
 let lower = lowerl | '_'
 let upper = ['A'-'Z']
 let other = lower | upper | digit
-let ident = ((lower | (lowerl '-' (upper | lowerl))) (other | (lowerl | upper | digit) '-' (lowerl | upper))* ((lowerl | upper | digit) '-' | '\''*)) | lowerl '-'
+let ident =
+   ((lower | (lowerl '-' (upper | lowerl)))
+    (other | (lowerl | upper | digit) '-' (lowerl | upper))*
+    ((lowerl | upper | digit) '-' | '\''*))
+ | lowerl '-'
 
 let blank_line = [' ' '\t' '\r']* '\n' | "//" [^'\n']* '\n'
 
