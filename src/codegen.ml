@@ -92,7 +92,7 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
       let al = List.fold_left
           (fun code aarg -> aarg ++ pushq !%rax ++ code) nop al
       in
-      pushq !%r12 ++ af ++ movq !%rax !%r12 ++ al ++ call_star (ind r12) ++
+      al ++ pushq !%r12 ++ af ++ movq !%rax !%r12 ++  call_star (ind r12) ++
       addq (imm (8 * List.length l)) !%rsp ++ popq r12, d
   | AWal (x, e) ->
       let a, d = gen_expr ret e in
@@ -103,19 +103,19 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
             a ++ movq (ind ~ofs rbp) !%r13 ++ movq !%rax (ind r13)
         | _ -> failwith "impossible"
       in 
-      a ++ xorq !%rax !%rax, d (* x := e renvoie () *)
+      a ++ xorl !%eax !%eax, d (* x := e renvoie () *)
   | AClo (l, f) ->
       let n = List.length l in
       let load_var i = function
         | VClo (n, _)  ->
-            movq (ind ~ofs:(n + 8) r12) (ind ~ofs:(8 * i + 1) r13)
+            movq (ind ~ofs:(n + 8) r12) (ind ~ofs:(8 * i + 8) r13)
         | VLoc (ofs, _) ->
-            movq (ind ~ofs rbp) (ind ~ofs:(8 * i + 1) r13)
+            movq (ind ~ofs rbp) !%r14 ++ movq !%r14 (ind ~ofs:(8 * i + 8) r13)
         | _ -> failwith "impossible"
       in
       let la = List.mapi load_var l |> List.fold_left (++) nop in
-      movq (imm (n * 8)) !%rdi ++ call "kokalloc" ++ movq !%rax !%r13 ++
-      movq (lab f) (ind r13) ++ la, nop
+      movq (imm (n * 8 + 8)) !%rdi ++ call "kokalloc" ++ movq !%rax !%r13 ++
+      movq (lab (".fun" ^ f)) !%r14 ++ movq !%r14 (ind r13) ++ la, nop
   | AVar x ->
       let a = 
         match x with
@@ -131,7 +131,7 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
       in a, nop
   | ALst l ->
       let rec gen_lst = function
-          [] -> xorq !%rax !%rax, nop
+          [] -> xorl !%eax !%eax, nop
         | hd :: tl ->
             let a, d = gen_expr ret hd in
             let atl, dtl = gen_lst l in
@@ -167,11 +167,13 @@ let gen_fun (f, e, n) =
   let a, d = gen_expr (".ret" ^ f) e in
   label (".fun" ^ f) ++
   pushq !%rbp ++
+  pushq !%r12 ++
   movq !%rsp !%rbp ++
   subq (imm n) !%rsp ++
   a ++
   label (".ret" ^ f) ++
   addq (imm n) !%rsp ++
+  popq r12 ++
   popq rbp ++
   ret, d ++ label ("_clo_" ^ f) ++ address [(".fun" ^ f)]
 

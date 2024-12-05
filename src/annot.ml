@@ -21,12 +21,12 @@ let find_var env x =
       | None -> VGlo x
       | Some v ->
             match SMap.find_opt x env.clo with
-            | Some (n, b) -> VLoc (n, b)
+            | Some (n, b) -> VClo (n, b)
             | None ->
                 let n, b = env.nclo, is_mutable v in
                 env.clo <- SMap.add x (n, b) env.clo;
                 env.nclo <- env.nclo + 8;
-                VLoc (n, b)
+                VClo (n, b)
 
 let arg_env l =
   List.mapi (fun i (x, _) -> (x, VLoc (24 + 8 * i, false))) l
@@ -121,9 +121,9 @@ let rec annot env {expr; ty} =
         let* e = annot nenv e in
         let f = fresh_name () in
         let* _ = add_fun (f, e, nenv.max_var) in
-        let clo = Array.make nenv.nclo (VLoc (0, false)) in
+        let clo = Array.make nenv.nclo (VLoc (-1, false)) in
         SMap.iter (fun x (i, _) -> clo.(i) <- find_var env x) nenv.clo;
-        return @@ AClo (Array.to_list clo, f)
+        return @@ AClo (Array.to_list clo |> List.filter ((<>) (VLoc (-1, false))), f)
         
   in return {aexpr; aty = fst (Type.remove_tvar ty)}
 

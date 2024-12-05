@@ -44,6 +44,69 @@ kokalloc:
 	popq	%rbp
 	ret
 
+.fun_default:
+	movq	8(%rsp), %r13
+	movq	16(%rsp), %rax
+	testq	%r13, %r13
+	cmovzq	(%r13), %rax
+	ret
+
+.fun_head:
+	movq	8(%rsp), %rax
+	ret
+
+.fun_tail:
+	movq	8(%rsp), %r13
+	xorl	%eax, %eax
+	testq	%r13, %r13
+	cmovnzq 8(%r13), %rax
+	ret
+
+.fun_repeat:
+	pushq	%r12
+	movq	16(%rsp), %rax
+.loop3:
+	testq	%rax, %rax
+	jz	.ret6
+	decq	%rax
+	call	*(%r12)
+	jmp	.loop3
+.ret6:
+	popq	%r12
+	xorl	%eax, %eax
+	ret
+
+.fun_for:
+	pushq	%r12
+	movq	24(%rsp), %r12
+	movq	8(%rsp), %rax
+.loop4:
+	cmpq	%rax, 16(%rsp)
+	jle	.ret7
+	pushq	%rax
+	call	*(%r12)
+	popq	%rax
+	incq	%rax
+.ret7:
+	popq	%r12
+	xorl	%eax, %eax
+	ret
+
+.fun_while:
+	pushq	%r12
+.loop5:
+	movq	8(%rsp), %r12
+	call	*(%r12)
+	testb	%al, %al
+	jz	.ret8
+	movq	16(%rsp), %r12
+	call	*(%r12)
+	jmp	.loop5
+.ret8:
+	popq	%r12
+	xorl	%eax, %eax
+	ret
+
 int_div:
 	movq	8(%rsp), %rax
 	cqto
@@ -127,7 +190,28 @@ unit_format:
 	.string "()\n"
 
 _clo_println_string:
-	.quad .fun_println_string
+	.quad	.fun_println_string
 
 _clo_println_int:
-	.quad .fun_println_int
+	.quad	.fun_println_int
+
+_clo_println_unit:
+	.quad	.fun_println_unit
+
+_clo_repeat:
+	.quad	.fun_repeat
+
+_clo_while:
+	.quad	.fun_while
+
+_clo_for:
+	.quad	.fun_for
+
+_clo_head:
+	.quad	.fun_head
+
+_clo_tail:
+	.quad	.fun_tail
+
+_clo_default:
+	.quad	.fun_default
