@@ -55,6 +55,21 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
       in
       a1 ++ pushq !%rax ++ a2 ++ popq rsi ++ movq !%rax !%rdi ++ a,
       d1 ++ d2
+  | ABop (e1, Cat, e2) ->
+      let a1, d1 = gen_expr ret e1 in
+      let a2, d2 = gen_expr ret e2 in
+      let a = match aty with
+        | TCon "string" -> call "kk_strcat"
+        | _ (* list *) -> call "kk_lstcat"
+      in
+      a1 ++ pushq !%rax ++ a2 ++ popq rsi ++ movq !%rax !%rdi ++ a,
+      d1 ++ d2
+  | ABop (e1, (Div | Mod as op), e2) ->
+      let a1, d1 = gen_expr ret e1 in
+      let a2, d2 = gen_expr ret e2 in
+      a2 ++ pushq !%rax ++ a1 ++ pushq !%rax ++
+      call (if op = Div then "int_div" else "int_mod") ++ addq (imm 16) !%rsp,
+      d1 ++ d2
   | ABop (e1, Dif, e2) ->
       let a, d = gen_expr ret ({aexpr = ABop (e1, Eq, e2); aty}) in
       a ++ xorq (imm 1) !%rax, d
@@ -104,7 +119,7 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
   | AVar x ->
       let a = 
         match x with
-        | VGlo l -> movq (lab l) !%rax
+        | VGlo l -> movq (ilab ("_clo_" ^ l)) !%rax
         | VLoc (ofs, false) ->
             movq (ind ~ofs rbp) !%rax
         | VLoc (ofs, true) ->
@@ -147,3 +162,26 @@ and gen_blk ret = function
             movq !%r13 (ind rax) ++ movq !%rax (ind ~ofs rbp), d
       in
       a ++ atl, d ++ dtl
+
+let gen_fun (f, e, n) =
+  let a, d = gen_expr (".ret" ^ f) e in
+  label (".fun" ^ f) ++
+  pushq !%rbp ++
+  movq !%rsp !%rbp ++
+  subq (imm n) !%rsp ++
+  a ++
+  label (".ret" ^ f) ++
+  addq (imm n) !%rsp ++
+  popq rbp ++
+  ret, d ++ label ("_clo_" ^ f) ++ address [(".fun" ^ f)]
+
+let gen_prog pt =
+  let rec gen_prog = function
+    [] -> nop, nop
+  | hd :: tl ->
+      let a, d = gen_fun hd in
+      let atl, dtl = gen_prog tl in
+      a ++ atl, d ++ dtl
+  in
+  let text, data = gen_prog pt in
+  { text = globl "main" ++ text ++ label "main" ++ jmp ".funmain"; data }

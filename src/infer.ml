@@ -207,7 +207,7 @@ and infer_blk ctx loc = function
             infer {ctx with var = SMap.add x (e.ty, true) ctx.var} tl
           in
           let tl, ty = get_tl_blk tl in
-          {expr = Blk (TDVal (x, e) :: tl); ty}, eff ++ eff'
+          {expr = Blk (TDVar (x, e) :: tl); ty}, eff ++ eff'
 
 (* la fonction ne sera pas appelé avec des variables de types dans l, pas besoin
    de traiter l'exception occurs check *)

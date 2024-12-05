@@ -89,18 +89,20 @@ let rec annot env {expr; ty} =
               env.nvar <- n + 8;
               if env.max_var < env.nvar then
                 env.max_var <- env.nvar;
-              let env = {env with loc = SMap.add x (VLoc (-n, false)) env.loc} in
-              let* tl = annot_blk env tl in
-              return @@ ADVal (-n, e) :: tl
+              let nenv = {env with loc = SMap.add x (VLoc (- n - 8, false)) env.loc} in
+              let* tl = annot_blk nenv tl in
+              env.max_var <- max env.max_var nenv.max_var;
+              return @@ ADVal (- n - 8, e) :: tl
           | TDVar (x, e) :: tl ->
               let* e = annot env e in
               let n = env.nvar in
               env.nvar <- n + 8;
               if env.max_var < env.nvar then
                 env.max_var <- env.nvar;
-              let env = {env with loc = SMap.add x (VLoc (-n, true)) env.loc} in
-              let* tl = annot_blk env tl in
-              return @@ ADVar (-n, e) :: tl
+              let nenv = {env with loc = SMap.add x (VLoc (- n - 8, true)) env.loc} in
+              let* tl = annot_blk nenv tl in
+              env.max_var <- max env.max_var nenv.max_var;
+              return @@ ADVar (-n - 8, e) :: tl
         in
         let* l = annot_blk env l in
         let blk = ABlk l in
@@ -125,18 +127,17 @@ let rec annot env {expr; ty} =
         
   in return {aexpr; aty = fst (Type.remove_tvar ty)}
 
-let annot_program (p, main) =
+let annot_program p =
   let rec annot_prog = function
       [] -> return ()
     | hd :: tl ->
         let env =
           { loc = arg_env hd.arg ; par = SMap.empty ; clo = SMap.empty ;
-            nvar = 0 ; nclo = 0 ; max_var = 0}
+            nvar = 0 ; nclo = 0 ; max_var = 0 }
         in
         let* e = annot env hd.body in
-        let f = fresh_name () in
         let* _ = annot_prog tl in
-        add_fun (f, e, env.max_var)
+        add_fun (hd.name, e, env.max_var)
   in
   let _, glob = annot_prog p [] in
   glob

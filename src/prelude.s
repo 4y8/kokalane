@@ -6,7 +6,6 @@ kokalloc:
 	pushq	%rbp
 	movq	%rsp, %rbp
 	andq	$-16, %rsp
-	movq	16(%rbp), %rdi
 	call	malloc
 	movq	%rbp, %rsp
 	popq	%rbp
@@ -46,9 +45,9 @@ kokalloc:
 	ret
 
 int_div:
-	movq	16(%rsp), %rax
+	movq	8(%rsp), %rax
 	cqto
-	movq	24(%rsp), %rsi
+	movq	16(%rsp), %rsi
 	idivq	%rsi
 	testq	%rdx, 8(%rsp)
 	jns	.ret1
@@ -59,9 +58,9 @@ int_div:
 	ret
 
 int_mod:
-	movq	16(%rsp), %rax
+	movq	8(%rsp), %rax
 	cqto
-	movq	24(%rsp), %rsi
+	movq	16(%rsp), %rsi
 	idivq	%rsi
 	testq	%rdx, 8(%rsp)
 	jns	.ret2
@@ -94,7 +93,7 @@ kk_streq:
 	sete	%al
 	ret
 
-lstcat:
+kk_lstcat:
 	testq	%rdi, %rdi
 	jz	.ret4
 	movq	%rdi, %rax
@@ -103,7 +102,7 @@ lstcat:
 	testq	%r13, %r13
 	jz	.ret5
 	movq	8(%rdi), %rdi
-	jmp	loop2
+	jmp	.loop2
 .ret4:
 	movq	%rsi, %rax
 	ret
@@ -127,8 +126,8 @@ int_format:
 unit_format:
 	.string "()\n"
 
-println_string:
+_clo_println_string:
 	.quad .fun_println_string
 
-println_int:
+_clo_println_int:
 	.quad .fun_println_int

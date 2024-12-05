@@ -1,5 +1,4 @@
 open Infer
-open Eval
 open Codegen
 
 let _ =
@@ -18,14 +17,15 @@ let _ =
                                            (Lexing.lexeme lexbuf))
     in
     if !parse_only then exit 0;
-    let pt, main =
+    let pt =
       try
         check_file p
       with
         NoMain -> Error.error_str_lexbuf lexbuf "Missing main function"
     in
     if !type_only then exit 0;
-    X86_64.print_in_file ~file:"out.s" (Codegen.gen_prog (pt, main));
+    let a = Annot.annot_program pt in 
+    X86_64.print_in_file ~file:"out.s" (Codegen.gen_prog a);
   in
   Arg.parse ["--parse-only", Arg.Set parse_only, "Stop after parsing";
              "--type-only", Arg.Set type_only, "Stop after type checking"]
