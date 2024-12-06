@@ -24,14 +24,14 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
   | ABop (e1, ((Add | Sub | Mul) as op), e2) ->
       let a1, d1 = gen_expr ret e1 in
       let a2, d2 = gen_expr ret e2 in
-      a2 ++ pushq !%rax ++ a1 ++ popq rsi ++
-      (List.assoc op arith_op) !%rsi !%rax,
+      a2 ++ pushq !%rax ++ a1 ++ popq r13 ++
+      (List.assoc op arith_op) !%r13 !%rax,
       d1 ++ d2
   | ABop (e1, ((Lt | Gt | Leq | Geq) as op), e2) ->
       let a1, d1 = gen_expr ret e1 in
       let a2, d2 = gen_expr ret e2 in
-      a1 ++ pushq !%rax ++ a2 ++ popq rsi ++ movq !%rax !%rdi ++
-      xorl !%eax !%eax ++ cmpq !%rdi !%rsi ++ (List.assoc op cmp_op) !%al,
+      a1 ++ pushq !%rax ++ a2 ++ popq r13 ++ movq !%rax !%r14 ++
+      xorl !%eax !%eax ++ cmpq !%r14 !%r13 ++ (List.assoc op cmp_op) !%al,
       d1 ++ d2
   | ABop (e1, And, e2) ->
       let a1, d1 = gen_expr ret e1 in
@@ -62,7 +62,7 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
         | TCon "string" -> call "kk_strcat"
         | _ (* list *) -> call "kk_lstcat"
       in
-      a1 ++ pushq !%rax ++ a2 ++ popq rsi ++ movq !%rax !%rdi ++ a,
+      a1 ++ pushq !%rax ++ a2 ++ popq rdi ++ movq !%rax !%rsi ++ a,
       d1 ++ d2
   | ABop (e1, (Div | Mod as op), e2) ->
       let a1, d1 = gen_expr ret e1 in
@@ -98,7 +98,7 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
       let a, d = gen_expr ret e in
       let a = match x with
         | VClo (n, _) ->
-            a ++ movq (ind ~ofs:(n + 8) r12) !%r13 ++ movq !%rax (ind r13)
+            a ++ movq (ind ~ofs:(8 * n + 8) r12) !%r13 ++ movq !%rax (ind r13)
         | VLoc (ofs, _) ->
             a ++ movq (ind ~ofs rbp) !%r13 ++ movq !%rax (ind r13)
         | _ -> failwith "impossible"
@@ -363,26 +363,25 @@ kk_strcat:
 	pushq	%rbp
 	movq	%rsp, %rbp
 	andq	$-16, %rsp
+	movq	%rdi, %r13
+	movq	%rsi, %r15
 	call	strlen
 	movq	%rax, %r14
-	movq	%rdi, %r13
-	movq	%rsi, %rdi
+	movq	%r15, %rdi
 	call	strlen
 	addq	%r14, %rax
-	addq	$2, %rax
+	incq	%rax
 	movq	%rax, %rdi
 	call	malloc
 	movq	%rax, %rdi
-	movq	%rsi, %r15
 	movq	%r13, %rsi
 	call	strcpy
 	movq	%r15, %rsi
-	movq	%r13, %rdi
+	movq	%rax, %rdi
 	call	strcat
 	movq	%rbp, %rsp
 	popq	%rbp
 	ret
-
 "
 
 let prelude_data =

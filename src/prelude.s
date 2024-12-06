@@ -185,21 +185,21 @@ kk_strcat:
 	pushq	%rbp
 	movq	%rsp, %rbp
 	andq	$-16, %rsp
+	movq	%rdi, %r13
+	movq	%rsi, %r15
 	call	strlen
 	movq	%rax, %r14
-	movq	%rdi, %r13
-	movq	%rsi, %rdi
+	movq	%r15, %rdi
 	call	strlen
 	addq	%r14, %rax
-	addq	$2, %rax
+	incq	%rax
 	movq	%rax, %rdi
 	call	malloc
 	movq	%rax, %rdi
-	movq	%rsi, %r15
 	movq	%r13, %rsi
 	call	strcpy
 	movq	%r15, %rsi
-	movq	%r13, %rdi
+	movq	%rax, %rdi
 	call	strcat
 	movq	%rbp, %rsp
 	popq	%rbp
