@@ -136,7 +136,7 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
         | hd :: tl ->
             let a, d = gen_expr ret hd in
             let atl, dtl = gen_lst tl in
-            atl ++ movq !%rax !%r13 ++ a ++ movq !%rax !%r14 ++
+            atl ++ pushq !%rax ++ a ++ popq r13 ++ movq !%rax !%r14 ++
             movq (imm 16) !%rdi ++ call "kokalloc" ++ movq !%r14 (ind rax) ++
             movq !%r13 (ind ~ofs:8 rax), d ++ dtl
       in gen_lst l
@@ -225,7 +225,9 @@ let prelude =
 	movq	8(%rsp), %r13
 	movq	16(%rsp), %rax
 	testq	%r13, %r13
-	cmovzq	(%r13), %rax
+	jz	.ret12
+	movq	(%r13), %rax
+.ret12:
 	ret
 
 .fun_head:
@@ -236,7 +238,9 @@ let prelude =
 	movq	8(%rsp), %r13
 	xorl	%eax, %eax
 	testq	%r13, %r13
-	cmovnzq 8(%r13), %rax
+	jz	.ret11
+	movq	8(%r13), %rax
+.ret11:
 	ret
 
 .fun_repeat:
@@ -345,18 +349,30 @@ kk_streq:
 kk_lstcat:
 	testq	%rdi, %rdi
 	jz	.ret4
-	movq	%rdi, %rax
+	pushq	%rsi
+	movq	%rdi, %r13
+	movq	$16, %rdi
+	call	kokalloc
+	movq	%rax, %r15
 .loop2:
-	movq	8(%rdi), %r13
-	testq	%r13, %r13
+	movq	0(%r13), %r14
+	movq	%r14, 0(%rax)
+	movq	8(%r13), %r14
+	testq	%r14, %r14
 	jz	.ret5
-	movq	8(%rdi), %rdi
+	movq	%rax, %r14
+	movq	$16, %rdi
+	call	kokalloc
+	movq	%rax, 8(%r14)
+	movq	8(%r13), %r13
 	jmp	.loop2
 .ret4:
 	movq	%rsi, %rax
 	ret
 .ret5:
-	movq	%rsi, 8(%rdi)
+	popq	%rsi
+	movq	%rsi, 8(%rax)
+	movq	%r15, %rax
 	ret
 
 kk_strcat:
@@ -428,4 +444,9 @@ let gen_prog pt =
       a ++ atl, d ++ dtl
   in
   let text, data = gen_prog pt in
-  { text = globl "main" ++ inline prelude ++ text ++ label "main" ++ call ".funmain" ++ xorl !%eax !%eax ++ ret; data = data ++ inline prelude_data }
+  { text =
+      globl "main" ++ inline prelude ++ text ++
+      label "main" ++ pushq !%r12 ++ pushq !%r13 ++ pushq !%r14 ++
+      pushq !%r15 ++ call ".funmain" ++ popq r15 ++ popq r14 ++ popq r13 ++
+      popq r12 ++ xorl !%eax !%eax ++ ret
+  ; data = data ++ inline prelude_data }

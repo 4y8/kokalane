@@ -48,7 +48,9 @@ kokalloc:
 	movq	8(%rsp), %r13
 	movq	16(%rsp), %rax
 	testq	%r13, %r13
-	cmovzq	(%r13), %rax
+	jz	.ret12
+	movq	(%r13), %rax
+.ret12:
 	ret
 
 .fun_head:
@@ -59,7 +61,9 @@ kokalloc:
 	movq	8(%rsp), %r13
 	xorl	%eax, %eax
 	testq	%r13, %r13
-	cmovnzq 8(%r13), %rax
+	jz	.ret11
+	movq	8(%r13), %rax
+.ret11:
 	ret
 
 .fun_repeat:
@@ -167,18 +171,30 @@ kk_streq:
 kk_lstcat:
 	testq	%rdi, %rdi
 	jz	.ret4
-	movq	%rdi, %rax
+	pushq	%rsi
+	movq	%rdi, %r13
+	movq	$16, %rdi
+	call	kokalloc
+	movq	%rax, %r15
 .loop2:
-	movq	8(%rdi), %r13
-	testq	%r13, %r13
+	movq	0(%r13), %r14
+	movq	%r14, 0(%rax)
+	movq	8(%r13), %r14
+	testq	%r14, %r14
 	jz	.ret5
-	movq	8(%rdi), %rdi
+	movq	%rax, %r14
+	movq	$16, %rdi
+	call	kokalloc
+	movq	%rax, 8(%r14)
+	movq	8(%r13), %r13
 	jmp	.loop2
 .ret4:
 	movq	%rsi, %rax
 	ret
 .ret5:
-	movq	%rsi, 8(%rdi)
+	popq	%rsi
+	movq	%rsi, 8(%rax)
+	movq	%r15, %rax
 	ret
 
 kk_strcat:
