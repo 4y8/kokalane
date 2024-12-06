@@ -65,6 +65,7 @@ kokalloc:
 .fun_repeat:
 	pushq	%r12
 	movq	16(%rsp), %rax
+	movq	24(%rsp), %r12
 .loop3:
 	testq	%rax, %rax
 	jz	.ret6
@@ -78,11 +79,11 @@ kokalloc:
 
 .fun_for:
 	pushq	%r12
-	movq	24(%rsp), %r12
-	movq	8(%rsp), %rax
+	movq	32(%rsp), %r12
+	movq	16(%rsp), %rax
 .loop4:
-	cmpq	%rax, 16(%rsp)
-	jle	.ret7
+	cmpq	%rax, 24(%rsp)
+	jl	.ret7
 	pushq	%rax
 	call	*(%r12)
 	popq	%rax
@@ -95,11 +96,11 @@ kokalloc:
 .fun_while:
 	pushq	%r12
 .loop5:
-	movq	8(%rsp), %r12
+	movq	16(%rsp), %r12
 	call	*(%r12)
 	testb	%al, %al
 	jz	.ret8
-	movq	16(%rsp), %r12
+	movq	24(%rsp), %r12
 	call	*(%r12)
 	jmp	.loop5
 .ret8:
@@ -108,22 +109,28 @@ kokalloc:
 	ret
 
 int_div:
+	movq	16(%rsp), %rsi
+	testq	%rsi, %rsi
+	jz	.ret9
 	movq	8(%rsp), %rax
 	cqto
-	movq	16(%rsp), %rsi
 	idivq	%rsi
 	testq	%rdx, 8(%rsp)
 	jns	.ret1
 	sarq	$63, %rsi
 	orq	$1, %rsi
 	subq	%rsi, %rax
+.ret9:
+	xorl	%eax, %eax
 .ret1:
 	ret
 
 int_mod:
-	movq	8(%rsp), %rax
-	cqto
 	movq	16(%rsp), %rsi
+	movq	8(%rsp), %rax
+	testq	%rsi, %rsi
+	jz	.ret10
+	cqto
 	idivq	%rsi
 	testq	%rdx, 8(%rsp)
 	jns	.ret2
@@ -134,6 +141,7 @@ int_mod:
 	addq	%rsi, %rdx
 .ret2:
 	movq	%rdx, %rax
+.ret10:
 	ret
 
 kk_streq:

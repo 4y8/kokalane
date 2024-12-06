@@ -1,7 +1,7 @@
 open Syntax
 
 type env =
-  { loc : variable SMap.t ; par : variable SMap.t
+  { mutable loc : variable SMap.t ; par : variable SMap.t
   ; mutable clo : (int * bool) SMap.t ; mutable nvar : int
   ; mutable max_var : int ; mutable nclo : int }
 
@@ -25,7 +25,7 @@ let find_var env x =
             | None ->
                 let n, b = env.nclo, is_mutable v in
                 env.clo <- SMap.add x (n, b) env.clo;
-                env.nclo <- env.nclo + 8;
+                env.nclo <- env.nclo + 1;
                 VClo (n, b)
 
 let arg_env l =
@@ -77,11 +77,12 @@ let rec annot env {expr; ty} =
         return @@ AUop (op, e)
     | Blk l ->
         let nvar = env.nvar in
-        let rec annot_blk env = function
+        let loc = env.loc in
+        let rec annot_blk = function
           | [] -> return []
           | TExpr e :: tl ->
               let* e = annot env e in
-              let* tl = annot_blk env tl in
+              let* tl = annot_blk tl in
               return @@ (AExpr e) :: tl
           | TDVal (x, e) :: tl ->
               let* e = annot env e in
@@ -89,9 +90,8 @@ let rec annot env {expr; ty} =
               env.nvar <- n + 8;
               if env.max_var < env.nvar then
                 env.max_var <- env.nvar;
-              let nenv = {env with loc = SMap.add x (VLoc (- n - 8, false)) env.loc} in
-              let* tl = annot_blk nenv tl in
-              env.max_var <- max env.max_var nenv.max_var;
+              env.loc <- SMap.add x (VLoc (- n - 8, false)) env.loc;
+              let* tl = annot_blk tl in
               return @@ ADVal (- n - 8, e) :: tl
           | TDVar (x, e) :: tl ->
               let* e = annot env e in
@@ -99,14 +99,14 @@ let rec annot env {expr; ty} =
               env.nvar <- n + 8;
               if env.max_var < env.nvar then
                 env.max_var <- env.nvar;
-              let nenv = {env with loc = SMap.add x (VLoc (- n - 8, true)) env.loc} in
-              let* tl = annot_blk nenv tl in
-              env.max_var <- max env.max_var nenv.max_var;
-              return @@ ADVar (-n - 8, e) :: tl
+              env.loc <- SMap.add x (VLoc (- n - 8, true)) env.loc;
+              let* tl = annot_blk tl in
+              return @@ ADVar (- n - 8, e) :: tl
         in
-        let* l = annot_blk env l in
+        let* l = annot_blk l in
         let blk = ABlk l in
         env.nvar <- nvar;
+        env.loc <- loc;
         return blk
     | Wal (x, e) ->
         let* e = annot env e in

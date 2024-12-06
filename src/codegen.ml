@@ -92,7 +92,7 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
       let al = List.fold_left
           (fun code aarg -> aarg ++ pushq !%rax ++ code) nop al
       in
-      pushq !%r12 ++ af ++ movq !%rax !%r12 ++ al  ++  call_star (ind r12) ++
+      pushq !%r12 ++ al ++ af ++ movq !%rax !%r12 ++ call_star (ind r12) ++
       addq (imm (8 * List.length l)) !%rsp ++ popq r12, d
   | AWal (x, e) ->
       let a, d = gen_expr ret e in
@@ -108,14 +108,15 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
       let n = List.length l in
       let load_var i = function
         | VClo (n, _)  ->
-            movq (ind ~ofs:(n + 8) r12) (ind ~ofs:(8 * i + 8) r13)
+            movq (ind ~ofs:(8 * n + 8) r12) !%r15 ++
+            movq !%r15 (ind ~ofs:(8 * i + 8) rax)
         | VLoc (ofs, _) ->
-            movq (ind ~ofs rbp) !%r14 ++ movq !%r14 (ind ~ofs:(8 * i + 8) r13)
+            movq (ind ~ofs rbp) !%r14 ++ movq !%r14 (ind ~ofs:(8 * i + 8) rax)
         | _ -> failwith "impossible"
       in
       let la = List.mapi load_var l |> List.fold_left (++) nop in
-      movq (imm (n * 8 + 8)) !%rdi ++ call "kokalloc" ++ movq !%rax !%r13 ++
-      movq (ilab (".fun" ^ f)) !%r14 ++ movq !%r14 (ind r13) ++ la, nop
+      movq (imm (n * 8 + 8)) !%rdi ++ call "kokalloc" ++
+      movq (ilab (".fun" ^ f)) !%r14 ++ movq !%r14 (ind rax) ++ la, nop
   | AVar x ->
       let a =
         match x with
@@ -125,9 +126,9 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
         | VLoc (ofs, true) ->
             movq (ind ~ofs rbp) !%r13 ++ movq (ind r13) !%rax
         | VClo (n, false) ->
-            movq (ind ~ofs:(n + 8) r12) !%rax
+            movq (ind ~ofs:(8 * n + 8) r12) !%rax
         | VClo (n, true) ->
-            movq (ind ~ofs:(n + 8) r12) !%rax ++ movq (ind rax) !%rax
+            movq (ind ~ofs:(8 * n + 8) r12) !%rax ++ movq (ind rax) !%rax
       in a, nop
   | ALst l ->
       let rec gen_lst = function
@@ -178,8 +179,7 @@ let gen_fun (f, e, n) =
   ret, d ++ label ("_clo_" ^ f) ++ address [(".fun" ^ f)]
 
 let prelude =
-"	.text
-kokalloc:
+"kokalloc:
 	pushq	%rbp
 	movq	%rsp, %rbp
 	andq	$-16, %rsp
@@ -242,28 +242,31 @@ kokalloc:
 .fun_repeat:
 	pushq	%r12
 	movq	16(%rsp), %rax
+	movq	24(%rsp), %r12
 .loop3:
 	testq	%rax, %rax
 	jz	.ret6
 	decq	%rax
+	pushq	%rax
 	call	*(%r12)
+	popq	%rax
 	jmp	.loop3
 .ret6:
 	popq	%r12
-	xorl	%eax, %eax
 	ret
 
 .fun_for:
 	pushq	%r12
-	movq	24(%rsp), %r12
-	movq	8(%rsp), %rax
+	movq	32(%rsp), %r12
+	movq	16(%rsp), %rax
 .loop4:
-	cmpq	%rax, 16(%rsp)
-	jle	.ret7
+	cmpq	%rax, 24(%rsp)
+	jl	.ret7
 	pushq	%rax
 	call	*(%r12)
 	popq	%rax
 	incq	%rax
+	jmp	.loop4
 .ret7:
 	popq	%r12
 	xorl	%eax, %eax
@@ -272,11 +275,11 @@ kokalloc:
 .fun_while:
 	pushq	%r12
 .loop5:
-	movq	8(%rsp), %r12
+	movq	16(%rsp), %r12
 	call	*(%r12)
 	testb	%al, %al
 	jz	.ret8
-	movq	16(%rsp), %r12
+	movq	24(%rsp), %r12
 	call	*(%r12)
 	jmp	.loop5
 .ret8:
@@ -285,9 +288,12 @@ kokalloc:
 	ret
 
 int_div:
+	movq	16(%rsp), %rsi
+	testq	%rsi, %rsi
+	cmovzq	%rsi, %rax
+	jz	.ret1
 	movq	8(%rsp), %rax
 	cqto
-	movq	16(%rsp), %rsi
 	idivq	%rsi
 	testq	%rdx, 8(%rsp)
 	jns	.ret1
@@ -298,9 +304,11 @@ int_div:
 	ret
 
 int_mod:
-	movq	8(%rsp), %rax
-	cqto
 	movq	16(%rsp), %rsi
+	movq	8(%rsp), %rax
+	testq	%rsi, %rsi
+	jz	.ret10
+	cqto
 	idivq	%rsi
 	testq	%rdx, 8(%rsp)
 	jns	.ret2
@@ -311,6 +319,7 @@ int_mod:
 	addq	%rsi, %rdx
 .ret2:
 	movq	%rdx, %rax
+.ret10:
 	ret
 
 kk_streq:
@@ -373,6 +382,7 @@ kk_strcat:
 	movq	%rbp, %rsp
 	popq	%rbp
 	ret
+
 "
 
 let prelude_data =
