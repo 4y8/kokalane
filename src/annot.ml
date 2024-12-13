@@ -33,7 +33,7 @@ let arg_env l =
   |> List.fold_left (fun env (x, i) -> SMap.add x i env) SMap.empty
 
 let (>>=) l r glob =
-  let v, glob = l glob in 
+  let v, glob = l glob in
   r v glob
 
 let (let*) = (>>=)
@@ -42,7 +42,7 @@ let return v glob = v, glob
 
 let add_fun x glob =
   (), x :: glob
-  
+
 let rec mmap f = function
   | [] -> return []
   | hd :: tl ->
@@ -51,6 +51,7 @@ let rec mmap f = function
       return @@ hd :: tl
 
 let rec annot env {expr; ty} =
+  let aty = fst (Type.remove_tvar ty) in
   let* aexpr = match expr with
     | Lit l -> return @@ ALit l
     | Bop (e1, op, e2) ->
@@ -113,6 +114,9 @@ let rec annot env {expr; ty} =
         return @@ AWal (find_var env x, e)
     | Var x ->
         return @@ AVar (find_var env x)
+    | CheckPredicate (x, pred) ->
+       let* e = annot env (pred x) in
+       return e.aexpr
     | Fun (l, e) ->
         let nenv =
           { loc = arg_env l ; par = Type.merge_ctx env.par env.loc
@@ -123,9 +127,9 @@ let rec annot env {expr; ty} =
         let* _ = add_fun (f, e, nenv.max_var) in
         let clo = Array.make nenv.nclo (VLoc (-1, false)) in
         SMap.iter (fun x (i, _) -> clo.(i) <- find_var env x) nenv.clo;
-        return @@ AClo (Array.to_list clo |> List.filter ((<>) (VLoc (-1, false))), f)
-        
-  in return {aexpr; aty = fst (Type.remove_tvar ty)}
+        return @@
+          AClo (Array.to_list clo |> List.filter ((<>) (VLoc (-1, false))), f)
+  in return {aexpr; aty}
 
 let annot_program p =
   let rec annot_prog = function

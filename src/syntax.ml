@@ -58,19 +58,23 @@ and surface_stmt_desc
 and surface_stmt =
   {stmt : surface_stmt_desc; loc : loc * loc}
 
-type typed_desc
-  = If  of typed_expr * typed_expr * typed_expr
-  | Bop of typed_expr * bop * typed_expr
-  | Ret of typed_expr
-  | Var of string
-  | Lit of lit
-  | App of typed_expr * typed_expr list
-  | Wal of string * typed_expr
-  | Fun of (string * pure_type) list * typed_expr
-  | Blk of typed_stmt list
-  | Lst of typed_expr list
-  | Uop of uop * typed_expr
+(* on utilise des GADTs pour le cas CheckPredicate qui permet de différer
+   certains tests (par exemple ceux s'apparentant à des classes de types, comme
+   print, pour lesquels on attend la fin de toutes les unifications) *)
 
+type typed_desc
+  = If  : typed_expr * typed_expr * typed_expr -> typed_desc
+  | Bop : typed_expr * bop * typed_expr -> typed_desc
+  | Ret : typed_expr -> typed_desc
+  | Var : string -> typed_desc
+  | Lit : lit -> typed_desc
+  | App : typed_expr * typed_expr list -> typed_desc
+  | Wal : string * typed_expr -> typed_desc
+  | Fun : (string * pure_type) list * typed_expr -> typed_desc
+  | Blk : typed_stmt list -> typed_desc
+  | Lst : typed_expr list -> typed_desc
+  | Uop : uop * typed_expr -> typed_desc
+  | CheckPredicate : 'b * ('b -> typed_expr) -> typed_desc
 and typed_expr
   = { expr : typed_desc; ty : pure_type }
 

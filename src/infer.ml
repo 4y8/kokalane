@@ -6,7 +6,7 @@ open Type
 open Error
 
 let rec infer ctx {sexpr; loc} = match sexpr with
-    SLit l -> {expr = Lit l; ty = type_of_lit l}, no_effect
+    SLit l -> { expr = Lit l ; ty = type_of_lit l }, no_effect
   | SVar x ->
       begin match SMap.find_opt x ctx.var with
         Some (t, _) ->
@@ -15,7 +15,7 @@ let rec infer ctx {sexpr; loc} = match sexpr with
             then add_effect no_effect EDiv
             else no_effect
           in
-          {expr = Var x; ty=t}, eff
+          { expr = Var x ; ty=t }, eff
       | None -> Error.unknown_var loc x
       end
   | SWal (x, e) ->
@@ -25,16 +25,14 @@ let rec infer ctx {sexpr; loc} = match sexpr with
           error_str loc (sprintf "Variable %s is immutable" x.string)
       | Some (t, true) ->
           let e, eff = check ctx t e in
-          {expr = Wal (x.string, e); ty = unit}, eff
+          { expr = Wal (x.string, e) ; ty = unit }, eff
       end
   | SApp (f, x) when is_builtin_fun f <> "" ->
       let s = is_builtin_fun f in
       begin match s, x with
         "println", [e] ->
           let e, eff = infer ctx e in
-          let t = check_printable loc e.ty in
-          let pr_type = TFun ([e.ty], unit, add_effect no_effect EConsole) in
-          {expr = App ({expr = Var t ; ty = pr_type}, [e]); ty = unit},
+          {expr = CheckPredicate (e, check_printable loc); ty = unit },
           add_effect eff EConsole
       | "default", [e; e'] ->
           let e', eff' = infer ctx e' in
@@ -115,8 +113,8 @@ let rec infer ctx {sexpr; loc} = match sexpr with
   | SBop (e1, Cat, e2) ->
       let e1, eff1 = infer ctx e1 in
       let e2, eff2 = check ctx e1.ty e2 in
-      check_concatenable loc e1.ty;
-      {expr = Bop (e1, Cat, e2); ty = e1.ty}, eff1 ++ eff2
+      {expr = CheckPredicate ((e1, e2), check_concatenable loc); ty = e1.ty}
+      , eff1 ++ eff2
   | SBop (e1, ((Lt | Gt | Leq | Geq) as op), e2) ->
       let e1, eff1 = infer ctx e1 in
       let e2, eff2 = check ctx e1.ty e2 in

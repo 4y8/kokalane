@@ -46,21 +46,25 @@ let rec remove_tvar = function
           TVLink t -> remove_tvar t
         | TVUnbd _ -> TVar r, true
 
-let check_printable loc t =
-  match fst (remove_tvar t) with
-  | TCon (("unit" | "bool" | "int" | "string") as s) ->  "println_" ^ s
+let check_printable loc ({expr; ty} as e) =
+    match fst (remove_tvar ty) with
+    | TCon (("unit" | "bool" | "int" | "string") as s) ->
+       let pr_type = TFun ([ty], unit, add_effect no_effect EConsole) in
+       let print = { expr = Var s ; ty = pr_type } in
+       { expr = App (print, [e]) ; ty = unit }
+    | _ ->
+       Error.error loc (fun fmt ->
+           Format.fprintf fmt "Tried to print %a which can't be printed"
+             Pprint.fmt_type ty)
+
+let rec check_concatenable loc ({expr; ty} as e, e') =
+  match fst (remove_tvar ty) with
+  | TCon "string" | TApp ("list", _) ->
+     { expr = Bop (e, Cat, e') ; ty }
   | _ ->
        Error.error loc (fun fmt ->
-          Format.fprintf fmt "Tried to print %a which can't be printed"
-            Pprint.fmt_type t)
-
-let rec check_concatenable loc t =
-  match fst (remove_tvar t) with
-  | TCon "string" | TApp ("list", _) -> ()
-  | _ -> 
-       Error.error loc (fun fmt ->
            fprintf fmt "Tried to concatenate %a which is can't be \
-concatenated" Pprint.fmt_type t)
+concatenated" Pprint.fmt_type ty)
 
 let check_comparable loc t =
   if fst (remove_tvar t) <> TCon "int" then
