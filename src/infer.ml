@@ -5,8 +5,18 @@ open Format
 open Type
 open Error
 
+let build_argmap =
+  let add_var mp (x, t) =
+    if SMap.mem x.string mp then
+      error_str x.loc @@
+      sprintf "Argument %s defined twice" x.string
+    else
+      SMap.add x.string (t, false) mp
+  in
+  List.fold_left add_var SMap.empty
+
 let rec infer ctx {sexpr; loc} = match sexpr with
-    SLit l -> { expr = Lit l ; ty = type_of_lit l }, no_effect
+  | SLit l -> { expr = Lit l ; ty = type_of_lit l }, no_effect
   | SVar x ->
       begin match SMap.find_opt x ctx.var with
         Some (t, _) ->
@@ -20,7 +30,7 @@ let rec infer ctx {sexpr; loc} = match sexpr with
       end
   | SWal (x, e) ->
       begin match SMap.find_opt x.string ctx.var with
-        None -> unknown_var x.loc x.string
+      | None -> unknown_var x.loc x.string
       | Some (_, false) ->
           error_str loc (sprintf "Variable %s is immutable" x.string)
       | Some (t, true) ->
@@ -28,9 +38,12 @@ let rec infer ctx {sexpr; loc} = match sexpr with
           { expr = Wal (x.string, e) ; ty = unit }, eff
       end
   | SApp (f, x) when is_builtin_fun f <> "" ->
+      (* pourrait être mieux avec du polymorhisme pour default, head, et tail ;
+         polymorphisme d'effet pour while, for et repeat ; et un système de type
+         class pour println *)
       let s = is_builtin_fun f in
       begin match s, x with
-        "println", [e] ->
+      | "println", [e] ->
           let e, eff = infer ctx e in
           {expr = CheckPredicate (e, check_printable loc); ty = unit },
           add_effect eff EConsole
@@ -74,7 +87,7 @@ let rec infer ctx {sexpr; loc} = match sexpr with
       | _ ->
           error_str loc @@
           sprintf "Function %s, got the wrong number of arguments" s
-                (* pourrait être mieux, en signalant le nombre d'arguments attendu *)
+          (* pourrait être mieux, en signalant le nombre d'arguments attendu *)
       end
   | SApp (f, x) ->
       let f, eff = infer ctx f in
@@ -143,20 +156,14 @@ let rec infer ctx {sexpr; loc} = match sexpr with
       in
       let arg = List.map (fun (x, t) -> x, erase_type t) arg in
       let x, tys = List.split arg in
-      let add_var mp (x, t) =
-        if SMap.mem x.string mp then
-          error_str x.loc (sprintf "Argument %s defined twice" x.string)
-        else
-          SMap.add x.string (t, false) mp
-      in
-      let arg_map = List.fold_left add_var SMap.empty arg in
+      let arg_map = build_argmap arg in
       let var = merge_ctx ctx.var arg_map in
       let body, eff = check {ctx with var; ret_type = new_tvar ()} ret_type b in
       (match t with
-        None -> ()
-      | Some (e, _) ->
-          if not ESet.(equal (fst eff) (fst (erase_effects e))) then
-            error_str loc (sprintf "Anonymous function has ill defined effects."));
+         None -> ()
+       | Some (e, _) ->
+           if not ESet.(subset (fst eff) (fst (erase_effects e))) then
+             error_str loc "Anonymous function has ill defined effects");
       let arg = List.map (fun (x, t) -> (x.string, t)) arg in
       {expr = Fun (arg, body); ty = TFun (tys, body.ty, eff)}, no_effect
 
@@ -214,8 +221,9 @@ and check_fun ctx l rt e =
   let e, eff = infer ctx e in
   let t = TFun (l, rt, no_effect) in
   (if not (eqtype ~check_effect:false e.ty t) then
-    error loc (fun fmt ->
-         fprintf fmt "Expected a function of type %a, got an expression of type %a"
+     error loc (fun fmt ->
+         fprintf fmt
+           "Expected a function of type %a, got an expression of type %a"
            Pprint.fmt_type t Pprint.fmt_type e.ty));
   match fst (remove_tvar e.ty) with
     TFun (_, _, eff') -> e, eff ++ eff'
@@ -231,14 +239,7 @@ let check_decl var {name; arg; res; body} =
   let arg = List.map (fun (x, t) -> x, erase_type t) arg in
   let x, t = List.split arg in
   let var = SMap.add name.string (TFun (t, ret_type, ret_eff), false) var in
-  let add_var mp (x, t) =
-    if SMap.mem x.string mp then
-      error_str x.loc @@
-      sprintf "Argument %s of %s defined twice" x.string name.string
-    else
-      SMap.add x.string (t, false) mp
-  in
-  let arg_map = List.fold_left add_var SMap.empty arg in
+  let arg_map = build_argmap arg in
   let var = merge_ctx var arg_map in
   let body, eff = check {var; ret_type; rec_fun = name.string } ret_type body in
   let ret_type, poly = remove_tvar ret_type in
@@ -257,7 +258,7 @@ let check_decl var {name; arg; res; body} =
   in
   let arg = List.map (fun (x, t) -> (x.string, t)) arg in
   if res <> None then
-    if not ESet.(equal (fst eff) (fst ret_eff)) then
+    if not ESet.(subset (fst eff) (fst ret_eff)) then
       error_str name.loc @@
       sprintf "Function %s has ill defined effects." name.string;
   {name = name.string; arg; body; res = TFun (t, ret_type, eff)}
