@@ -3,4 +3,6 @@ _build/*
 *.automaton
 *.conflicts
 *.o
+*.fls
+*.log
 kokac

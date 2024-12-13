@@ -99,9 +99,9 @@ let expr_blk :=
     | IF; e = hi_expr; THEN; t = no_dangling_expr; ELSE; f = expr_blk; <SIf>
     | IF; e = hi_expr; r = return(expr_blk); { SIf (e, r, empty_block) }
   )
-  | ~ = return(block); <>
+  | ~ = return(expr_blk); <>
 
-let atom_app_blk :=   
+let atom_app_blk :=
   | loc_expr(a = atom; f = fn(expr_blk); { add_app a f })
   | loc_expr(a = atom_app_blk; f = fn(expr_blk); { add_app a f })
 
