@@ -131,13 +131,13 @@ let rec infer ctx {sexpr; loc} = match sexpr with
   | SBop (e1, ((Lt | Gt | Leq | Geq) as op), e2) ->
       let e1, eff1 = infer ctx e1 in
       let e2, eff2 = check ctx e1.ty e2 in
-      check_comparable loc e1.ty;
-      {expr = Bop (e1, op, e2); ty = bool}, eff1 ++ eff2
+      {expr = CheckPredicate((e1, op, e2), check_comparable loc); ty = bool},
+      eff1 ++ eff2
   | SBop (e1, ((Eq | Dif) as op), e2) ->
       let e1, eff1 = infer ctx e1 in
       let e2, eff2 = check ctx e1.ty e2 in
-      check_equalable loc e1.ty;
-      {expr = Bop (e1, op, e2); ty = bool}, eff1 ++ eff2
+      {expr = CheckPredicate ((e1, op, e2), check_equalable loc) ; ty = bool},
+      eff1 ++ eff2
   | SBlk l ->
       infer_blk ctx loc l
   | SRet e ->

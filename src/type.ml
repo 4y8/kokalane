@@ -50,7 +50,7 @@ let check_printable loc ({expr; ty} as e) =
     match fst (remove_tvar ty) with
     | TCon (("unit" | "bool" | "int" | "string") as s) ->
        let pr_type = TFun ([ty], unit, add_effect no_effect EConsole) in
-       let print = { expr = Var s ; ty = pr_type } in
+       let print = { expr = Var ("println_" ^ s) ; ty = pr_type } in
        { expr = App (print, [e]) ; ty = unit }
     | _ ->
        Error.error loc (fun fmt ->
@@ -59,26 +59,39 @@ let check_printable loc ({expr; ty} as e) =
 
 let rec check_concatenable loc ({expr; ty} as e, e') =
   match fst (remove_tvar ty) with
-  | TCon "string" | TApp ("list", _) ->
-     { expr = Bop (e, Cat, e') ; ty }
+  | TCon "string" ->
+      let cat_type = TFun ([ty; ty], ty, no_effect) in
+      let cat = { expr = Var "strcat" ; ty = cat_type } in
+      { expr = App (cat, [e; e']) ; ty }
+  | TApp ("list", _) ->
+      let cat_type = TFun ([ty; ty], ty, no_effect) in
+      let cat = { expr = Var "lstcat" ; ty = cat_type } in
+      { expr = App (cat, [e; e']) ; ty }
   | _ ->
        Error.error loc (fun fmt ->
            fprintf fmt "Tried to concatenate %a which is can't be \
 concatenated" Pprint.fmt_type ty)
 
-let check_comparable loc t =
-  if fst (remove_tvar t) <> TCon "int" then
+let check_comparable loc ({expr; ty} as e, op, e') =
+  if fst (remove_tvar ty) = int then
+    {expr = Bop (e, op, e') ; ty = bool }
+  else
     Error.error loc (fun fmt ->
       fprintf fmt "Tried to compare %a which can't be compared"
-        Pprint.fmt_type t)
+        Pprint.fmt_type ty)
 
-let check_equalable loc t =
-  match fst (remove_tvar t) with
-      TCon "int" | TCon "bool" | TCon "string" -> ()
-    | _ ->
-       Error.error loc (fun fmt ->
-           fprintf fmt "Tried to check equality for %a which can't be compared"
-             Pprint.fmt_type t)
+let check_equalable loc ({expr; ty} as e, op, e') =
+  match fst (remove_tvar ty) with
+  | TCon "int" | TCon "bool" ->
+      {expr = Bop (e, op, e') ; ty = bool}
+  | TCon "string" ->
+      let eq_type = TFun ([ty; ty], bool, no_effect) in
+      let eq = { expr = Var "streq" ; ty = eq_type } in
+      { expr = App (eq, [e; e']) ; ty = bool }
+  | _ ->
+      Error.error loc (fun fmt ->
+          fprintf fmt "Tried to check equality for %a which can't be compared"
+            Pprint.fmt_type ty)
 
 exception Occurs
 

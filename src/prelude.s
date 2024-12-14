@@ -169,6 +169,8 @@ kk_streq:
 	ret
 
 kk_lstcat:
+	movq	16(%rsp), %rsi
+	movq	8(%rsp), %rdi
 	testq	%rdi, %rdi
 	jz	.ret4
 	pushq	%rsi
@@ -201,8 +203,9 @@ kk_strcat:
 	pushq	%rbp
 	movq	%rsp, %rbp
 	andq	$-16, %rsp
-	movq	%rdi, %r13
-	movq	%rsi, %r15
+	movq	24(%rbp), %r15
+	movq	16(%rbp), %r13
+	movq	%r13, %rdi
 	call	strlen
 	movq	%rax, %r14
 	movq	%r15, %rdi
@@ -254,3 +257,12 @@ _clo_tail:
 
 _clo_default:
 	.quad	.fun_default
+
+_clo_strcat:
+	.quad	kk_strcat
+
+_clo_streq:
+	.quad	kk_streq
+
+_clo_lstcat:
+	.quad	kk_lstcat

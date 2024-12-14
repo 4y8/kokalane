@@ -48,21 +48,8 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
   | ABop (e1, Eq, e2) ->
       let a1, d1 = gen_expr ret e1 in
       let a2, d2 = gen_expr ret e2 in
-      let a = match aty with
-        | TCon "string" -> call "streq"
-        | _ (* bool ou int *) ->
-            xorl !%eax !%eax ++ cmpq !%rdi !%rsi ++ sete !%al
-      in
-      a1 ++ pushq !%rax ++ a2 ++ popq rsi ++ movq !%rax !%rdi ++ a,
-      d1 ++ d2
-  | ABop (e1, Cat, e2) ->
-      let a1, d1 = gen_expr ret e1 in
-      let a2, d2 = gen_expr ret e2 in
-      let a = match aty with
-        | TCon "string" -> call "kk_strcat"
-        | _ (* list *) -> call "kk_lstcat"
-      in
-      a1 ++ pushq !%rax ++ a2 ++ popq rdi ++ movq !%rax !%rsi ++ a,
+      a1 ++ pushq !%rax ++ a2 ++ popq rsi ++ movq !%rax !%rdi ++
+      xorl !%eax !%eax ++ cmpq !%rdi !%rsi ++ sete !%al,
       d1 ++ d2
   | ABop (e1, (Div | Mod as op), e2) ->
       let a1, d1 = gen_expr ret e1 in
@@ -347,6 +334,8 @@ kk_streq:
 	ret
 
 kk_lstcat:
+	movq	16(%rsp), %rsi
+	movq	8(%rsp), %rdi
 	testq	%rdi, %rdi
 	jz	.ret4
 	pushq	%rsi
@@ -379,8 +368,9 @@ kk_strcat:
 	pushq	%rbp
 	movq	%rsp, %rbp
 	andq	$-16, %rsp
-	movq	%rdi, %r13
-	movq	%rsi, %r15
+	movq	24(%rbp), %r15
+	movq	16(%rbp), %r13
+	movq	%r13, %rdi
 	call	strlen
 	movq	%rax, %r14
 	movq	%r15, %rdi
@@ -433,6 +423,15 @@ _clo_tail:
 
 _clo_default:
 	.quad	.fun_default
+
+_clo_strcat:
+	.quad	kk_strcat
+
+_clo_streq:
+	.quad	kk_streq
+
+_clo_lstcat:
+	.quad	kk_lstcat
 "
 
 let gen_prog pt =

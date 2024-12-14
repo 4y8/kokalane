@@ -64,13 +64,13 @@ fun f()
 
 Le code de la figure~\ref{code2} montre que l'on ne peut se contenter de gérer
 les effets de manière naïve avec seulement des ensembles, car il faut choisir un
-type pour \texttt{f} dans \texttt{f}.
+type pour \texttt{f} dans \texttt{f}, et le compilateur doit rejeter ce
+programme car \texttt{f} a l'effet \texttt{console} à cause de la dernière
+ligne. Les effets sont, donc, représentés comme un ensemble d'effet muni d'une
+référence optionnelle vers un booléen optionnel. L'ensemble représente les
+effets
 
-Les effets sont représentés comme un ensemble d'effet muni d'une référence
-optionnelle vers un booléen optionnelle.
-
-\begin{figure}[h]
-\label{code1}
+\begin{figure}[h]\label{code1}
 \begin{verbatim}
 fun f()
   println(f())

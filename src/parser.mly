@@ -1,6 +1,7 @@
 %{
     open Syntax
-    let empty_block = {sexpr = SBlk []; loc = Lexing.dummy_pos, Lexing.dummy_pos}
+    let empty_block =
+      {sexpr = SBlk []; loc = Lexing.dummy_pos, Lexing.dummy_pos}
     let add_app {sexpr; loc} x =
       match sexpr with
         SApp (g, y) -> SApp (g, y @ [x])
@@ -41,9 +42,7 @@ let lit :=
   | FALSE; { LBool false }
   | LPAR; RPAR; { LUnit }
 
-string_loc:
-     string = IDENT { {string; loc = $startpos, $endpos} }
-;
+string_loc: string = IDENT { {string; loc = $startpos, $endpos} } ;
 
 atype_noloc:
   | t = IDENT { STCon t }
@@ -62,9 +61,7 @@ result:
 
 (* cette règle ne considère que des listes de 0, 2 ou plus types (i.e. tout sauf
 1) pour éviter des conflits avec le 3ème cas de atype *)
-tlist:
-  | t = ty COMMA l = separated_nonempty_list(COMMA, ty) { t :: l }
-;
+tlist: t = ty COMMA l = separated_nonempty_list(COMMA, ty) { t :: l } ;
 
 ty_noloc:
   | t = atype ARR r = result { let e, t' = r in STFun ([t], t', e) }
@@ -95,9 +92,9 @@ let atom :=
 let expr_blk :=
   | ~ = block; <>
   | loc_expr(
-    | IF; e = hi_expr; THEN; b = expr_blk; { SIf (e, b, empty_block) }
-    | IF; e = hi_expr; THEN; t = no_dangling_expr; ELSE; f = expr_blk; <SIf>
-    | IF; e = hi_expr; r = return(expr_blk); { SIf (e, r, empty_block) }
+    | IF; e = if_expr; THEN; b = expr_blk; { SIf (e, b, empty_block) }
+    | IF; e = if_expr; THEN; t = no_dangling_expr; ELSE; f = expr_blk; <SIf>
+    | IF; e = if_expr; r = return(expr_blk); { SIf (e, r, empty_block) }
   )
   | ~ = return(expr_blk); <>
 
@@ -159,23 +156,19 @@ let no_dangling_expr :=
   | ~ = wal_expr(no_dangling_expr); <>
   | ~ = block; <>
   | loc_expr(
-      IF; ~ = hi_expr; THEN; t = no_dangling_expr; ELSE; f = no_dangling_expr;
+      IF; ~ = if_expr; THEN; t = no_dangling_expr; ELSE; f = no_dangling_expr;
           <SIf>)
 
 let if_expr :=
   | ~ = wal_expr(expr); <>
   | loc_expr(
-    | IF; ~ = hi_expr; THEN; ~ = no_dangling_expr; ELSE; ~ = expr; <SIf>
-    | IF; c = hi_expr; THEN; e = expr; { SIf (c, e, empty_block) }
-    | IF; c = hi_expr; r = return(expr); { SIf (c, r, empty_block) }
+    | IF; ~ = if_expr; THEN; ~ = no_dangling_expr; ELSE; ~ = expr; <SIf>
+    | IF; c = if_expr; THEN; e = expr; { SIf (c, e, empty_block) }
+    | IF; c = if_expr; r = return(expr); { SIf (c, r, empty_block) }
   )
 
-hi_expr:
-    e = if_expr { e }
-;
-
 expr:
-  | e = hi_expr { e }
+  | e = if_expr { e }
   | e = block { e }
 ;
 
@@ -184,9 +177,7 @@ stmt_noloc:
   | VAR x = IDENT WAL l = expr SCOL+ { SDVar (x, l) }
 ;
 
-sexpr:
-  | e = expr SCOL+ { {stmt = SExpr e; loc = $startpos, $endpos} }
-;
+sexpr: e = expr SCOL+ { {stmt = SExpr e; loc = $startpos, $endpos} } ;
 
 stmt:
   | stmt = stmt_noloc { {stmt; loc = $startpos, $endpos} }
@@ -204,13 +195,9 @@ let block :=
     | LCUR; SCOL*; RCUR; {SBlk []}
   )
 
-ann:
-    DCOL r = result { r }
-;
+ann: DCOL r = result { r } ;
 
-arg:
-    x = string_loc DCOL t = ty { x, t }
-;
+arg: x = string_loc DCOL t = ty { x, t } ;
 
 let funbody(expr) :=
     LPAR; x = separated_list(COMMA, arg); RPAR; ~ = option(ann); e = expr; <>
@@ -220,6 +207,4 @@ decl:
     { let arg, res, body = fb in { name; arg; body; res } }
 ;
 
-file:
-    SCOL* l = decl* EOF { l }
-;
+file: SCOL* l = decl* EOF { l } ;

@@ -17,8 +17,8 @@ let _ =
         Parser.file Lexer.next_token lexbuf
       with
         _ ->
-          Error.error_str_lexbuf lexbuf (Printf.sprintf "Unexpected token: \"%s\""
-                                           (Lexing.lexeme lexbuf))
+          Error.error_str_lexbuf lexbuf
+            (Printf.sprintf "Unexpected token: \"%s\"" (Lexing.lexeme lexbuf))
     in
     if !parse_only then exit 0;
     let pt =
@@ -27,8 +27,8 @@ let _ =
       with
         NoMain -> Error.error_str_lexbuf lexbuf "Missing main function"
     in
-    if !type_only then exit 0;
     let a = Annot.annot_program pt in
+    if !type_only then exit 0;
     X86_64.print_in_file ~file:(prefix ^ ".s") (Codegen.gen_prog a)
   in
   Arg.parse ["--parse-only", Arg.Set parse_only, "Stop after parsing";

@@ -34,24 +34,25 @@
 
   let last = ref DUMMY
 
-  let rec loop c t loc next =
+  let rec loop c loc next t =
     let m = Stack.top indent in
       if c < m then begin
         ignore (Stack.pop indent);
-        (match t with
-           SCOL :: RCUR :: _ -> ()
-         | _ -> (Queue.add SCOL q; Queue.add RCUR q));
-        loop c t loc next
+        let l =
+          if next <> RCUR then
+            [RCUR]
+          else []
+        in
+        l @ loop c loc next t
       end else if c > m then Error.error_str loc "Wrong indentation"
       else
         if not TSet.(mem !last end_con) && not TSet.(mem next beg_con)
-          then Queue.add SCOL q
+        then SCOL :: t
+        else t
 
   let eof lexbuf =
     let loc = Lexing.lexeme_start_p lexbuf, Lexing.lexeme_end_p lexbuf in
-    loop 0 [EOF] loc EOF;
-    Queue.add EOF q;
-    [Queue.take q]
+    loop 0 loc EOF [EOF]
 
   let new_line lexer lexbuf c =
     let loc = Lexing.lexeme_start_p lexbuf, Lexing.lexeme_end_p lexbuf in
@@ -62,13 +63,12 @@
     if c > m
     then begin
       if not TSet.(mem !last end_con) && not TSet.(mem next beg_con)
-      then (Queue.add LCUR q; Stack.push c indent)
-      else if !last = LCUR then Stack.push c indent;
-    end else begin
-      loop c t loc next
-    end;
-    List.iter (fun t -> Queue.add t q) t;
-    [Queue.take q]
+      then (Stack.push c indent; LCUR :: t)
+      else
+        (if !last = LCUR then Stack.push c indent;
+         t)
+    end else
+      loop c loc next t
 
   let insert_nl lexbuf =
     String.iter (fun c -> if c = '\n' then Lexing.new_line lexbuf)
@@ -85,7 +85,7 @@ let ident =
     ((lowerl | upper | digit) '-' | '\''*))
  | lowerl '-'
 
-let blank_line = [' ' '\t' '\r']* '\n' | "//" [^'\n']* '\n'
+let blank_line = [' ' '\t' '\r']* ("//" [^'\n']*)? '\n'
 
 rule lexer = parse
   | [' ' '\t' '\r'] { lexer lexbuf }
@@ -113,7 +113,7 @@ rule lexer = parse
   | "(" { [LPAR] }
   | ")" { [RPAR] }
   | "{" { [LCUR] }
-  | "}" { [SCOL; RCUR] }
+  | "}" { [RCUR] }
   | "[" { [LSQU] }
   | "]" { [RSQU] }
   | "<" { [LANG] }
@@ -128,7 +128,7 @@ rule lexer = parse
   | "True" { [TRUE] }
   | "False" { [FALSE] }
   | '"' { [STRING (string [] lexbuf)] }
-  | eof { eof lexbuf  }
+  | eof { eof lexbuf }
   | _ as c { error lexbuf (Printf.sprintf "Unknown character : %c" c) }
 
 and comment = parse
@@ -154,7 +154,7 @@ and string acc = parse
 and begin_line_comment = parse
   | "*/" blank_line
     { Lexing.new_line lexbuf; blank_lines lexbuf }
-  | "*/" eof { [EOF] }
+  | "*/" eof { eof lexbuf }
   | "*/" { error lexbuf "Comment disturbing indentation" }
   | eof { error lexbuf "Unterminated comment" }
   | '\n' { Lexing.new_line lexbuf ; begin_line_comment lexbuf }
@@ -167,34 +167,16 @@ and blank_lines = parse
   | ' '* eof { eof lexbuf }
 
 {
-  let print_token = function
-    SCOL -> print_endline ";"
-  | RCUR -> print_endline "}"
-  | LCUR -> print_endline "{"
-  | IDENT s -> print_endline s
-  | INT n -> Printf.printf "%d\n" n
-  | FUN -> print_endline "fun"
-  | LPAR -> print_endline "("
-  | RPAR -> print_endline ")"
-  | IF -> print_endline "if"
-  | DCOL -> print_endline ":"
-  | RETURN -> print_endline "return"
-  | FN -> print_endline "fn"
-  | PLUS -> print_endline "+"
-  | MINUS -> print_endline "-"
-  | LEQ -> print_endline "<="
-  | COMMA -> print_endline ","
-  | EOF -> print_endline "eof"
+  let emited_scol = ref false
 
-  let next_token lexbuf =
+  let rec next_token lexbuf =
+    if Queue.is_empty q then
+      List.iter (fun t -> Queue.add t q) (lexer lexbuf);
     let t =
-      if not Queue.(is_empty q) then
-        Queue.take q
-      else (
-        let l = lexer lexbuf in
-        List.iter (fun t -> Queue.add t q) (List.tl l);
-        List.hd l
-       )
+      if Queue.peek q = RCUR && not !emited_scol then
+        (emited_scol := true; SCOL)
+      else
+        (emited_scol := false; Queue.take q)
     in
     last := t; t
 }
