@@ -18,7 +18,7 @@ let builtin_fun =
   ["println"; "repeat"; "while"; "default"; "for"; "head"; "tail"]
   |> SSet.of_list
 
-let is_builtin_fun {sexpr; loc} = match sexpr with
+let is_builtin_fun {sexpr; _} = match sexpr with
   | SVar x when SSet.mem x builtin_fun -> x
   | _ -> ""
 
@@ -36,48 +36,48 @@ let rec remove_tvar = function
           TVLink t -> remove_tvar t
         | TVUnbd _ -> TVar r, true
 
-let check_printable loc ({expr; ty} as e) =
+let check_printable loc ({ty; _} as e) =
     match fst (remove_tvar ty) with
     | TCon (("unit" | "bool" | "int" | "string") as s) ->
        let pr_type = TFun ([ty], unit, NoRec (ESet.singleton EConsole)) in
-       let print = { expr = Var ("println_" ^ s) ; ty = pr_type } in
-       { expr = App (print, [e]) ; ty = unit }
+       let print = { texpr = Var ("println_" ^ s) ; ty = pr_type } in
+       { texpr = App (print, [e]) ; ty = unit }
     | _ ->
        Error.error loc (fun fmt ->
            Format.fprintf fmt "Tried to print %a which can't be printed"
              Pprint.fmt_type ty)
 
-let rec check_concatenable loc ({expr; ty} as e, e') =
+let check_concatenable loc ({ty; _} as e, e') =
   match fst (remove_tvar ty) with
   | TCon "string" ->
       let cat_type = TFun ([ty; ty], ty, NoRec ESet.empty) in
-      let cat = { expr = Var "strcat" ; ty = cat_type } in
-      { expr = App (cat, [e; e']) ; ty }
+      let cat = { texpr = Var "strcat" ; ty = cat_type } in
+      { texpr = App (cat, [e; e']) ; ty }
   | TApp ("list", _) ->
       let cat_type = TFun ([ty; ty], ty, NoRec ESet.empty) in
-      let cat = { expr = Var "lstcat" ; ty = cat_type } in
-      { expr = App (cat, [e; e']) ; ty }
+      let cat = { texpr = Var "lstcat" ; ty = cat_type } in
+      { texpr = App (cat, [e; e']) ; ty }
   | _ ->
        Error.error loc (fun fmt ->
            fprintf fmt "Tried to concatenate %a which is can't be \
 concatenated" Pprint.fmt_type ty)
 
-let check_comparable loc ({expr; ty} as e, op, e') =
+let check_comparable loc ({ty; _} as e, op, e') =
   if fst (remove_tvar ty) = int then
-    {expr = Bop (e, op, e') ; ty = bool }
+    { texpr = Bop (e, op, e') ; ty = bool }
   else
     Error.error loc (fun fmt ->
       fprintf fmt "Tried to compare %a which can't be compared"
         Pprint.fmt_type ty)
 
-let check_equalable loc ({expr; ty} as e, op, e') =
+let check_equalable loc ({ty; _} as e, op, e') =
   match fst (remove_tvar ty) with
   | TCon "int" | TCon "bool" ->
-      {expr = Bop (e, op, e') ; ty = bool}
+      { texpr = Bop (e, op, e') ; ty = bool}
   | TCon "string" ->
       let eq_type = TFun ([ty; ty], bool, NoRec ESet.empty) in
-      let eq = { expr = Var "streq" ; ty = eq_type } in
-      { expr = App (eq, [e; e']) ; ty = bool }
+      let eq = { texpr = Var "streq" ; ty = eq_type } in
+      { texpr = App (eq, [e; e']) ; ty = bool }
   | _ ->
       Error.error loc (fun fmt ->
           fprintf fmt "Tried to check equality for %a which can't be compared"
@@ -122,27 +122,27 @@ let tvar = ref 0
 let new_tvar () =
   incr tvar; TVar (ref (TVUnbd !tvar))
 
-let rec erase_type {stype; loc} = match stype with
+let rec erase_type {stype; tloc} = match stype with
   | STCon s ->
       begin match SMap.find_opt s valid_types with
         Some 0 -> TCon s
       | None ->
-          Error.error_str loc @@ sprintf "Unknown type constructor: %s" s
+          Error.error_str tloc @@ sprintf "Unknown type constructor: %s" s
       | Some n ->
-          Error.error_str loc @@
+          Error.error_str tloc @@
           sprintf "Type constructor %s expected %d constructors, got 0"
             s n
       end
   | STFun (l, t, e) ->
       TFun (List.map erase_type l, erase_type t, erase_effects e)
-  | STApp ({string; loc}, t) ->
+  | STApp ({string; strloc}, t) ->
       match SMap.find_opt string valid_types with
       | Some 1 -> TApp (string, erase_type t)
       | None ->
-          Error.error_str loc @@
+          Error.error_str strloc @@
           sprintf "Unknown type constructor: %s" string
       | Some n ->
-          Error.error_str loc @@
+          Error.error_str strloc @@
           sprintf "Type constructor %s expected %d constructors, got 1"
             string n
 

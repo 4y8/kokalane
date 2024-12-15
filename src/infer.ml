@@ -9,15 +9,15 @@ open Context
 let build_argmap =
   let add_var mp (x, t) =
     if SMap.mem x.string mp then
-      error_str x.loc @@
+      error_str x.strloc @@
       sprintf "Argument %s defined twice" x.string
     else
       SMap.add x.string (t, false) mp
   in
   List.fold_left add_var SMap.empty
 
-let rec infer ctx {sexpr; loc} = match sexpr with
-  | SLit l -> { expr = Lit l ; ty = type_of_lit l }, NoRec ESet.empty
+let rec infer ctx {sexpr; sloc} = match sexpr with
+  | SLit l -> { texpr = Lit l ; ty = type_of_lit l }, NoRec ESet.empty
   | SVar x ->
       begin match SMap.find_opt x ctx.var with
         Some (t, _) ->
@@ -26,17 +26,17 @@ let rec infer ctx {sexpr; loc} = match sexpr with
             then NoRec (ESet.singleton EDiv)
             else NoRec ESet.empty
           in
-          { expr = Var x ; ty=t }, eff
-      | None -> Error.unknown_var loc x
+          { texpr = Var x ; ty = t }, eff
+      | None -> Error.unknown_var sloc x
       end
   | SWal (x, e) ->
       begin match SMap.find_opt x.string ctx.var with
-      | None -> unknown_var x.loc x.string
+      | None -> unknown_var x.strloc x.string
       | Some (_, false) ->
-          error_str loc (sprintf "Variable %s is immutable" x.string)
+          error_str sloc (sprintf "Variable %s is immutable" x.string)
       | Some (t, true) ->
           let e, eff = check ctx t e in
-          { expr = Wal (x.string, e) ; ty = unit }, eff
+          { texpr = Wal (x.string, e) ; ty = unit }, eff
       end
   | SApp (f, x) when is_builtin_fun f <> "" ->
       (* pourrait être mieux avec du polymorhisme pour default, head, et tail ;
@@ -46,47 +46,48 @@ let rec infer ctx {sexpr; loc} = match sexpr with
       begin match s, x with
       | "println", [e] ->
           let e, eff = infer ctx e in
-          {expr = CheckPredicate (e, check_printable loc); ty = unit },
+          { texpr = CheckPredicate (e, check_printable sloc) ; ty = unit },
           eff ++ (NoRec (ESet.singleton EConsole))
       | "default", [e; e'] ->
           let e', eff' = infer ctx e' in
           let e, eff = check ctx (maybe e'.ty) e in
           let def_type = TFun ([e.ty; e'.ty], e'.ty, eff) in
-          {expr = App ({expr = Var s; ty = def_type}, [e; e']); ty = e'.ty},
-          eff ++ eff'
+          { texpr = App ({ texpr = Var s ; ty = def_type }, [e; e'])
+          ; ty = e'.ty}, eff ++ eff'
       | "head", [e] ->
           let tv = new_tvar () in
           let e, eff = check ctx (list tv) e in
           let hd_type = TFun ([list tv], maybe tv, eff) in
-          {expr = App ({expr = Var s; ty = hd_type}, [e]); ty = maybe tv}, eff
+          { texpr = App ({ texpr = Var s ; ty = hd_type }, [e])
+          ; ty = maybe tv}, eff
       | "tail", [e] ->
           let tv = list (new_tvar ()) in
           let e, eff = check ctx tv e in
           let tl_type = TFun ([tv], tv, NoRec ESet.empty) in
-          {expr = App({expr = Var s; ty = tl_type}, [e]); ty = tv}, eff
+          { texpr = App({ texpr = Var s ; ty = tl_type }, [e]) ; ty = tv }, eff
       | "repeat", [n; b] ->
           let n, eff = check ctx int n in
           let b, eff' = check_fun ctx [] unit b in
           let rep_type = TFun ([int; b.ty], unit, eff ++ eff') in
-          {expr = App ({expr = Var s; ty = rep_type}, [n; b]); ty = unit},
-          eff ++ eff'
+          { texpr = App ({ texpr = Var s ; ty = rep_type }, [n; b])
+          ; ty = unit}, eff ++ eff'
       | "while", [c; b] ->
           let c, eff = check_fun ctx [] bool c in
           let b, eff' = check_fun ctx [] unit b in
           let eff = eff ++ eff' ++ NoRec (ESet.singleton EDiv) in
           let whi_type = TFun ([c.ty; b.ty], unit, eff) in
-          {expr = App ({expr = Var s; ty = whi_type}, [c; b]); ty = unit},
-          eff
+          { texpr = App ({ texpr = Var s ; ty = whi_type }, [c; b])
+          ; ty = unit}, eff
       | "for", [m; n; b] ->
           let m, eff = check ctx int m in
           let n, eff' = check ctx int n in
           let b, eff'' = check_fun ctx [int] unit b in
           let eff = eff ++ eff' ++ eff'' in
           let for_type = TFun ([m.ty; n.ty; b.ty], unit, eff) in
-          {expr = App({expr = Var s; ty = for_type}, [m; n; b]); ty = unit},
-          eff
+          { texpr = App({ texpr = Var s ; ty = for_type }, [m; n; b])
+          ; ty = unit}, eff
       | _ ->
-          error_str loc @@
+          error_str sloc @@
           sprintf "Function %s, got the wrong number of arguments" s
           (* pourrait être mieux, en signalant le nombre d'arguments attendu *)
       end
@@ -96,105 +97,110 @@ let rec infer ctx {sexpr; loc} = match sexpr with
         TFun (arg, res, eff') ->
           (try
              let x, eff'' = List.map2 (check ctx) arg x |> List.split in
-             {expr = App (f, x); ty = res},
+             { texpr = App (f, x) ; ty = res},
              List.fold_left (++) (eff ++ eff') eff''
            with Invalid_argument _ ->
-             error_str loc @@
+             error_str sloc @@
              sprintf "Function expected %d arguments, got %d" (List.length arg)
                (List.length x))
       | _ ->
-          error loc (fun fmt ->
+          error sloc (fun fmt ->
               fprintf fmt "Exepected a function, got an expression of type %a"
                 Pprint.fmt_type f.ty)
       end
   | SLst l ->
       let ty = new_tvar () in
       let l, eff = List.split (List.map (check ctx ty) l) in
-      {expr = Lst l; ty = list ty}, List.fold_left (++) (NoRec ESet.empty) eff
+      { texpr = Lst l ; ty = list ty },
+      List.fold_left (++) (NoRec ESet.empty) eff
   | SIf (e, b1, b2) ->
       let e, eff = check ctx bool e in
       let b1, eff1 = infer ctx b1 in
       let b2, eff2 = check ctx b1.ty b2 in
-      {expr = If (e, b1, b2); ty = b1.ty}, eff ++ eff1 ++ eff2
+      { texpr = If (e, b1, b2) ; ty = b1.ty }, eff ++ eff1 ++ eff2
   | SBop (e1, ((Add | Sub | Mul | Div | Mod) as op), e2) ->
       let e1, eff1 = check ctx int e1 in
       let e2, eff2 = check ctx int e2 in
-      {expr = Bop (e1, op, e2); ty = int}, eff1 ++ eff2
+      { texpr = Bop (e1, op, e2) ; ty = int}, eff1 ++ eff2
   | SBop (e1, ((And | Or) as op), e2) ->
       let e1, eff1 = check ctx bool e1 in
       let e2, eff2 = check ctx bool e2 in
-      {expr = Bop (e1, op, e2); ty = bool}, eff1 ++ eff2
+      { texpr = Bop (e1, op, e2); ty = bool}, eff1 ++ eff2
   | SBop (e1, Cat, e2) ->
       let e1, eff1 = infer ctx e1 in
       let e2, eff2 = check ctx e1.ty e2 in
-      {expr = CheckPredicate ((e1, e2), check_concatenable loc); ty = e1.ty}
-      , eff1 ++ eff2
+      { texpr = CheckPredicate ((e1, e2), check_concatenable sloc)
+      ; ty = e1.ty}, eff1 ++ eff2
   | SBop (e1, ((Lt | Gt | Leq | Geq) as op), e2) ->
       let e1, eff1 = infer ctx e1 in
       let e2, eff2 = check ctx e1.ty e2 in
-      {expr = CheckPredicate((e1, op, e2), check_comparable loc); ty = bool},
+      { texpr = CheckPredicate((e1, op, e2), check_comparable sloc); ty = bool},
       eff1 ++ eff2
   | SBop (e1, ((Eq | Dif) as op), e2) ->
       let e1, eff1 = infer ctx e1 in
       let e2, eff2 = check ctx e1.ty e2 in
-      {expr = CheckPredicate ((e1, op, e2), check_equalable loc) ; ty = bool},
-      eff1 ++ eff2
+      { texpr = CheckPredicate ((e1, op, e2), check_equalable sloc)
+      ; ty = bool}, eff1 ++ eff2
   | SBlk l ->
-      infer_blk ctx loc l
+      infer_blk ctx sloc l
   | SRet e ->
       let e, eff = check ctx ctx.ret_type e in
-      {expr = Ret e; ty = new_tvar ()}, eff
+      { texpr = Ret e ; ty = new_tvar () }, eff
   | SUop (Neg, e) ->
       let e, eff = check ctx int e in
-      {expr = Uop (Neg, e); ty = int}, eff
+      { texpr = Uop (Neg, e) ; ty = int }, eff
   | SUop (Not, e) ->
       let e, eff = check ctx bool e in
-      {expr = Uop (Neg, e); ty = bool}, eff
+      { texpr = Uop (Neg, e) ; ty = bool }, eff
   | SFun (arg, t, b) ->
       let ret_type = match t with
           Some (_, t) -> erase_type t
         | None -> new_tvar ()
       in
       let arg = List.map (fun (x, t) -> x, erase_type t) arg in
-      let x, tys = List.split arg in
+      let _, tys = List.split arg in
       let arg_map = build_argmap arg in
       let var = merge_ctx ctx.var arg_map in
       let nctx = {ctx with var; ret_type = new_tvar ()} in
       let body, eff = check nctx ret_type b in
-      (match t with
-         None -> ()
-       | Some (e, _) ->
-           if not ESet.(subset (get_set ctx eff)
-                          (get_set ctx @@ erase_effects e)) then
-             error_str loc "Anonymous function has ill defined effects");
+      let eff = match t with
+        | None -> eff
+        | Some (e, _) ->
+            let ret_eff = erase_effects e in
+           if ESet.subset (get_set ctx eff) (get_set ctx ret_eff) then
+             ret_eff
+           else
+             error_str sloc "Anonymous function has ill defined effects"
+      in
       let arg = List.map (fun (x, t) -> (x.string, t)) arg in
       (match nctx.rec_has_console, ctx.rec_has_console with
         Some b, Some b' when b <> b' ->
-          error_str loc
+          error_str sloc
             (sprintf "Function %s has ill defined effects" ctx.rec_fun)
       | s, None -> ctx.rec_has_console <- s
       | _ -> ());
-      {expr = Fun (arg, body); ty = TFun (tys, body.ty, eff)}, NoRec ESet.empty
+      { texpr = Fun (arg, body) ; ty = TFun (tys, body.ty, eff) },
+      NoRec ESet.empty
 
-and check ctx t {sexpr; loc} =
-  let e, eff = infer ctx {sexpr; loc} in
+and check ctx t {sexpr; sloc} =
+  let e, eff = infer ctx {sexpr; sloc} in
   try
     if eqtype ctx t e.ty then e, eff else
-      Error.type_mismatch loc t e.ty
+      Error.type_mismatch sloc t e.ty
   with
     Occurs ->
-      error loc (fun fmt ->
+      error sloc (fun fmt ->
           fprintf fmt "Occurs check failed between types %a and %a"
             Pprint.fmt_type t Pprint.fmt_type e.ty)
 
-and infer_blk ctx loc = function
-    [] -> {expr = Blk []; ty = unit}, NoRec ESet.empty
+and infer_blk ctx sloc = function
+  | [] -> { texpr = Blk [] ; ty = unit }, NoRec ESet.empty
   | [{stmt = SExpr e; _}] ->
       let e, eff = infer ctx e in
-      {expr = Blk [TExpr e]; ty = e.ty}, eff
+      { texpr = Blk [TExpr e] ; ty = e.ty }, eff
   | hd :: tl ->
-      let tl = {sexpr = SBlk tl; loc} in
-      let get_tl_blk {expr; ty} = match expr with
+      let tl = { sexpr = SBlk tl ; sloc } in
+      let get_tl_blk {texpr; ty} = match texpr with
           Blk l -> l, ty
         | _ -> failwith "internal error"
       in
@@ -203,26 +209,26 @@ and infer_blk ctx loc = function
           let e, eff = infer ctx e in
           let tl, eff' = infer ctx tl in
           let tl, ty = get_tl_blk tl in
-          {expr = Blk (TExpr e :: tl); ty}, eff ++ eff'
+          { texpr = Blk (TExpr e :: tl) ; ty }, eff ++ eff'
       | SDVal (x, e) ->
           let e, eff = infer ctx e in
           let tl, eff' =
             infer {ctx with var = SMap.add x (e.ty, false) ctx.var} tl
           in
           let tl, ty = get_tl_blk tl in
-          {expr = Blk ((TDVal (x, e)) :: tl); ty}, eff ++ eff'
+          { texpr = Blk ((TDVal (x, e)) :: tl) ; ty }, eff ++ eff'
       | SDVar (x, e) ->
           let e, eff = infer ctx e in
           let tl, eff' =
             infer {ctx with var = SMap.add x (e.ty, true) ctx.var} tl
           in
           let tl, ty = get_tl_blk tl in
-          {expr = Blk (TDVar (x, e) :: tl); ty}, eff ++ eff'
+          { texpr = Blk (TDVar (x, e) :: tl) ; ty }, eff ++ eff'
 
 (* la fonction ne sera pas appelé avec des variables de types dans l, pas besoin
    de traiter l'exception occurs check *)
 and check_fun ctx l rt e =
-  let loc = e.loc in
+  let loc = e.sloc in
   let e, eff = infer ctx e in
   let t = TFun (l, rt, NoRec ESet.empty) in
   (if not (eqtype ctx ~check_effect:false e.ty t) then
@@ -241,51 +247,56 @@ let check_decl var {name; args; res; body} =
         erase_type t, erase_effects eff
   in
   let arg = List.map (fun (x, t) -> x, erase_type t) args in
-  let x, t = List.split arg in
+  let _, t = List.split arg in
   let var = SMap.add name.string (TFun (t, ret_type, ret_eff), false) var in
   let arg_map = build_argmap arg in
   let var = merge_ctx var arg_map in
   let ctx = {var; ret_type; rec_fun = name.string ; rec_has_console = None} in
-  let body, eff = check ctx ret_type body in
+  let tbody, eff = check ctx ret_type body in
   let ret_type, poly = remove_tvar ret_type in
   if poly then
-    Error.error_str name.loc
+    Error.error_str name.strloc
       (sprintf "Function %s has polymporphic type" name.string);
   let eff =
     match ctx.rec_has_console with
     | None -> eff
     | Some false ->
       if ESet.mem EConsole (get_set ctx eff) then
-        error_str name.loc @@
+        error_str name.strloc @@
         sprintf "Function %s has console effect while it shouldn't" name.string
       else eff
     | _ -> eff ++ NoRec (ESet.singleton EConsole)
   in
-  let formals = List.map (fun (x, t) -> (x.string, t)) arg in
-  if res <> None then
-    if not ESet.(subset (get_set ctx eff) (get_set ctx ret_eff)) then
-      error_str name.loc @@
-      sprintf "Function %s has ill defined effects." name.string;
-  {name = name.string; formals; body; res_type = TFun (t, ret_type, eff)}
+  let targs = List.map (fun (x, t) -> (x.string, t)) arg in
+  let eff =
+    if res = None then
+      NoRec (get_set ctx eff)
+    else if ESet.subset (get_set ctx eff) (get_set ctx ret_eff) then
+      ret_eff
+    else
+      error_str name.strloc @@
+      sprintf "Function %s has ill defined effects." name.string
+  in
+  { tname = name.string; targs; tbody; res_type = TFun (t, ret_type, eff)}
 
 exception NoMain
 
 let check_file (p : surface_decl list) =
   let add_function mp (x, t) =
     if SMap.mem x.string mp then
-      error_str x.loc (sprintf "Function %s defined twice" x.string)
+      error_str x.strloc (sprintf "Function %s defined twice" x.string)
     else
       SMap.add x.string (t, false) mp
   in
   let rec check_file has_main var = function
-    | { name ; args ; body ; res } as hd :: tl ->
+    | { name ; _ } as hd :: tl ->
         let d = check_decl var hd in
         let has_main =
-          if d.name = "main" then
-            if d.formals = [] then
+          if d.tname = "main" then
+            if d.targs = [] then
               true
             else
-              error_str hd.name.loc "Function main takes no argument"
+              error_str name.strloc "Function main takes no argument"
           else has_main
         in
         let var = add_function var (name, d.res_type) in

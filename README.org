@@ -1,2 +1,3 @@
 * kokalane
-  ~kokalane~ est un compilateur pour le langage Petit Koka.
+  ~kokalane~ est un compilateur pour le langage Petit Koka. Pour obtenir un
+  executable

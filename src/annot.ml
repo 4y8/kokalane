@@ -54,9 +54,9 @@ let rec mmap f = function
       let* tl = mmap f tl in
       return @@ hd :: tl
 
-let rec annot env {expr; ty} =
+let rec annot env {texpr; ty} =
   let aty = fst (Type.remove_tvar ty) in
-  let* aexpr = match expr with
+  let* aexpr = match texpr with
     | Lit l -> return @@ ALit l
     | Bop (e1, op, e2) ->
         let* e1 = annot env e1 in
@@ -133,19 +133,19 @@ let rec annot env {expr; ty} =
         SMap.iter (fun x (i, _) -> clo.(i) <- find_var env x) nenv.clo;
         return @@
           AClo (Array.to_list clo |> List.filter ((<>) (VLoc (-1, false))), f)
-  in return {aexpr; aty}
+  in return { aexpr ; aty }
 
 let annot_program p =
   let rec annot_prog = function
       [] -> return ()
     | hd :: tl ->
         let env =
-          { loc = arg_env hd.formals ; par = SMap.empty ; clo = SMap.empty ;
+          { loc = arg_env hd.targs ; par = SMap.empty ; clo = SMap.empty ;
             nvar = 0 ; nclo = 0 ; max_var = 0 }
         in
-        let* e = annot env hd.body in
+        let* e = annot env hd.tbody in
         let* _ = annot_prog tl in
-        add_fun (hd.name, e, env.max_var)
+        add_fun (hd.tname, e, env.max_var)
   in
   let _, glob = annot_prog p [] in
   glob

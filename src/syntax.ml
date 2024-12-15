@@ -9,7 +9,7 @@ type lit =
 
 type loc = Lexing.position
 
-type string_loc = { string : string ; loc : loc * loc }
+type string_loc = { string : string ; strloc : loc * loc }
 
 module SMap = Map.Make(String)
 module SSet = Set.Make(String)
@@ -28,7 +28,7 @@ type effect = HasRec of ESet.t | NoRec of ESet.t
 type surface_type_desc
   = STCon of string | STApp of string_loc * surface_type
   | STFun of surface_type list * surface_type * string_loc list
-and surface_type = { stype : surface_type_desc ; loc : loc * loc }
+and surface_type = { stype : surface_type_desc ; tloc : loc * loc }
 
 type pure_type
   = TCon of string | TApp of string * pure_type
@@ -51,14 +51,14 @@ type surface_desc
   | SLst of surface_expr list
   | SUop of uop * surface_expr
 and surface_expr =
-  { sexpr : surface_desc; loc : loc * loc }
+  { sexpr : surface_desc; sloc : loc * loc }
 
 and surface_stmt_desc
   = SExpr of surface_expr
   | SDVar of string * surface_expr
   | SDVal of string * surface_expr
 and surface_stmt =
-  {stmt : surface_stmt_desc; loc : loc * loc}
+  {stmt : surface_stmt_desc; stmloc : loc * loc}
 
 (* on utilise des GADTs pour le cas CheckPredicate qui permet de différer
    certains tests (par exemple ceux s'apparentant à des classes de types, comme
@@ -78,7 +78,7 @@ type typed_desc
   | Uop : uop * typed_expr -> typed_desc
   | CheckPredicate : 'b * ('b -> typed_expr) -> typed_desc
 and typed_expr
-  = { expr : typed_desc; ty : pure_type }
+  = { texpr : typed_desc; ty : pure_type }
 
 and typed_stmt
   = TExpr of typed_expr
@@ -116,5 +116,5 @@ type surface_decl =
   ; res : result option ; body : surface_expr}
 
 type typed_decl =
-  { name : string ; formals : (string * pure_type) list ; body : typed_expr
+  { tname : string ; targs : (string * pure_type) list ; tbody : typed_expr
   ; res_type : pure_type }

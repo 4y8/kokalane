@@ -1,7 +1,5 @@
 open Lexing
-open Pprint
 open Format
-open Syntax
 
 let error (bg, nd) msg =
   let b = bg.pos_cnum - bg.pos_bol in

@@ -1,11 +1,11 @@
 %{
     open Syntax
     let empty_block =
-      {sexpr = SBlk []; loc = Lexing.dummy_pos, Lexing.dummy_pos}
-    let add_app {sexpr; loc} x =
+      {sexpr = SBlk []; sloc = Lexing.dummy_pos, Lexing.dummy_pos}
+    let add_app {sexpr; sloc} x =
       match sexpr with
         SApp (g, y) -> SApp (g, y @ [x])
-      | e -> SApp ({sexpr; loc}, [x])
+      | _ -> SApp ({sexpr; sloc}, [x])
 %}
 
 %token ELSE FN FUN IF RETURN THEN VAL VAR
@@ -33,7 +33,7 @@ grammaire LR(1) sans directives pour petit koka *)
 %%
 
 let loc_expr(expr) ==
-  sexpr = expr; { { sexpr; loc = $startpos, $endpos } }
+  sexpr = expr; { { sexpr; sloc = $startpos, $endpos } }
 
 let lit :=
   | ~ = INT; <LInt>
@@ -42,7 +42,7 @@ let lit :=
   | FALSE; { LBool false }
   | LPAR; RPAR; { LUnit }
 
-string_loc: string = IDENT { {string; loc = $startpos, $endpos} } ;
+string_loc: string = IDENT { {string; strloc = $startpos, $endpos} } ;
 
 atype_noloc:
   | t = IDENT { STCon t }
@@ -50,7 +50,7 @@ atype_noloc:
 ;
 
 atype:
-  | stype = atype_noloc { { stype; loc = $startpos, $endpos } }
+  | stype = atype_noloc { { stype; tloc = $startpos, $endpos } }
   | LPAR t = ty RPAR { t }
 ;
 
@@ -72,7 +72,7 @@ ty_noloc:
 
 ty:
   | t = atype { t }
-  | stype = ty_noloc { { stype; loc = $startpos, $endpos} }
+  | stype = ty_noloc { { stype; tloc = $startpos, $endpos} }
 ;
 
 let var := loc_expr (~=IDENT; <SVar>)
@@ -86,7 +86,7 @@ let atom :=
       | ~ = atom; LPAR; ~ = separated_list(COMMA, expr); RPAR; <SApp>
       | x = atom; DOT; f = var; { SApp (f, [x]) }
       | f = atom; b = block;
-        { let b = {sexpr = SFun ([], None, b); loc = b.loc} in add_app f b }
+        { let b = {sexpr = SFun ([], None, b); sloc = b.sloc} in add_app f b }
   )
 
 let expr_blk :=
@@ -177,10 +177,10 @@ stmt_noloc:
   | VAR x = IDENT WAL l = expr SCOL+ { SDVar (x, l) }
 ;
 
-sexpr: e = expr SCOL+ { {stmt = SExpr e; loc = $startpos, $endpos} } ;
+sexpr: e = expr SCOL+ { {stmt = SExpr e; stmloc = $startpos, $endpos} } ;
 
 stmt:
-  | stmt = stmt_noloc { {stmt; loc = $startpos, $endpos} }
+  | stmt = stmt_noloc { {stmt; stmloc = $startpos, $endpos} }
   | s = sexpr { s }
 ;
 

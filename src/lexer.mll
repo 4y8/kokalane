@@ -168,7 +168,7 @@ and blank_lines = parse
 {
   let emited_scol = ref false
 
-  let rec next_token lexbuf =
+  let next_token lexbuf =
     if Queue.is_empty q then
       List.iter (fun t -> Queue.add t q) (lexer lexbuf);
     let t =

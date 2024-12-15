@@ -1,6 +1,3 @@
-open Infer
-open Codegen
-
 let _ =
   let parse_only = ref false in
   let type_only = ref false in
@@ -23,9 +20,9 @@ let _ =
     if !parse_only then exit 0;
     let pt =
       try
-        check_file p
+        Infer.check_file p
       with
-        NoMain -> Error.error_str_lexbuf lexbuf "Missing main function"
+        Infer.NoMain -> Error.error_str_lexbuf lexbuf "Missing main function"
     in
     let a = Annot.annot_program pt in
     if !type_only then exit 0;

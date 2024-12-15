@@ -7,3 +7,9 @@ kokac: src/type.ml src/kokalane.ml src/parser.mly src/lexer.mll src/effect.ml sr
 clean:
 	rm kokac
 	rm -r _build
+
+rapport: rapport.tex
+	latexmk rapport.tex
+	latexmk -c
+	rm rapport.bbl
+	rm rapport.run.xml

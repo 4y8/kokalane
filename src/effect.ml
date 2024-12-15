@@ -33,9 +33,9 @@ let get_set ctx = function
   | HasRec s when ctx.rec_has_console = Some true -> ESet.add EConsole s
   | HasRec s -> s
 
-let erase_effect {string; loc} =
+let erase_effect {string; strloc} =
   match SMap.find_opt string valid_effects with
-  | None -> error_str loc @@ sprintf "Unknown effect: %s" string
+  | None -> error_str strloc @@ sprintf "Unknown effect: %s" string
   | Some e -> e
 
 let erase_effects l =
