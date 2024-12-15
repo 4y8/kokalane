@@ -4,6 +4,7 @@ open Syntax.Effect
 open Format
 open Type
 open Error
+open Context
 
 let build_argmap =
   let add_var mp (x, t) =
@@ -16,14 +17,14 @@ let build_argmap =
   List.fold_left add_var SMap.empty
 
 let rec infer ctx {sexpr; loc} = match sexpr with
-  | SLit l -> { expr = Lit l ; ty = type_of_lit l }, no_effect
+  | SLit l -> { expr = Lit l ; ty = type_of_lit l }, NoRec ESet.empty
   | SVar x ->
       begin match SMap.find_opt x ctx.var with
         Some (t, _) ->
           let eff =
             if x = ctx.rec_fun
-            then add_effect no_effect EDiv
-            else no_effect
+            then NoRec (ESet.singleton EDiv)
+            else NoRec ESet.empty
           in
           { expr = Var x ; ty=t }, eff
       | None -> Error.unknown_var loc x
@@ -46,7 +47,7 @@ let rec infer ctx {sexpr; loc} = match sexpr with
       | "println", [e] ->
           let e, eff = infer ctx e in
           {expr = CheckPredicate (e, check_printable loc); ty = unit },
-          add_effect eff EConsole
+          eff ++ (NoRec (ESet.singleton EConsole))
       | "default", [e; e'] ->
           let e', eff' = infer ctx e' in
           let e, eff = check ctx (maybe e'.ty) e in
@@ -61,7 +62,7 @@ let rec infer ctx {sexpr; loc} = match sexpr with
       | "tail", [e] ->
           let tv = list (new_tvar ()) in
           let e, eff = check ctx tv e in
-          let tl_type = TFun ([tv], tv, no_effect) in
+          let tl_type = TFun ([tv], tv, NoRec ESet.empty) in
           {expr = App({expr = Var s; ty = tl_type}, [e]); ty = tv}, eff
       | "repeat", [n; b] ->
           let n, eff = check ctx int n in
@@ -72,7 +73,7 @@ let rec infer ctx {sexpr; loc} = match sexpr with
       | "while", [c; b] ->
           let c, eff = check_fun ctx [] bool c in
           let b, eff' = check_fun ctx [] unit b in
-          let eff = add_effect (eff ++ eff') EDiv in
+          let eff = eff ++ eff' ++ NoRec (ESet.singleton EDiv) in
           let whi_type = TFun ([c.ty; b.ty], unit, eff) in
           {expr = App ({expr = Var s; ty = whi_type}, [c; b]); ty = unit},
           eff
@@ -109,7 +110,7 @@ let rec infer ctx {sexpr; loc} = match sexpr with
   | SLst l ->
       let ty = new_tvar () in
       let l, eff = List.split (List.map (check ctx ty) l) in
-      {expr = Lst l; ty = list ty}, List.fold_left (++) no_effect eff
+      {expr = Lst l; ty = list ty}, List.fold_left (++) (NoRec ESet.empty) eff
   | SIf (e, b1, b2) ->
       let e, eff = check ctx bool e in
       let b1, eff1 = infer ctx b1 in
@@ -158,32 +159,36 @@ let rec infer ctx {sexpr; loc} = match sexpr with
       let x, tys = List.split arg in
       let arg_map = build_argmap arg in
       let var = merge_ctx ctx.var arg_map in
-      let body, eff = check {ctx with var; ret_type = new_tvar ()} ret_type b in
+      let nctx = {ctx with var; ret_type = new_tvar ()} in
+      let body, eff = check nctx ret_type b in
       (match t with
          None -> ()
        | Some (e, _) ->
-           if not ESet.(subset (fst eff) (fst (erase_effects e))) then
+           if not ESet.(subset (get_set ctx eff)
+                          (get_set ctx @@ erase_effects e)) then
              error_str loc "Anonymous function has ill defined effects");
       let arg = List.map (fun (x, t) -> (x.string, t)) arg in
-      {expr = Fun (arg, body); ty = TFun (tys, body.ty, eff)}, no_effect
+      (match nctx.rec_has_console, ctx.rec_has_console with
+        Some b, Some b' when b <> b' ->
+          error_str loc
+            (sprintf "Function %s has ill defined effects" ctx.rec_fun)
+      | s, None -> ctx.rec_has_console <- s
+      | _ -> ());
+      {expr = Fun (arg, body); ty = TFun (tys, body.ty, eff)}, NoRec ESet.empty
 
 and check ctx t {sexpr; loc} =
   let e, eff = infer ctx {sexpr; loc} in
   try
-    if eqtype t e.ty then e, eff else
+    if eqtype ctx t e.ty then e, eff else
       Error.type_mismatch loc t e.ty
   with
     Occurs ->
       error loc (fun fmt ->
           fprintf fmt "Occurs check failed between types %a and %a"
             Pprint.fmt_type t Pprint.fmt_type e.ty)
-  | EffectUnification ->
-      error loc (fun fmt ->
-          fprintf fmt "Effect mismatch between types %a and %a"
-            Pprint.fmt_type t Pprint.fmt_type e.ty)
 
 and infer_blk ctx loc = function
-    [] -> {expr = Blk []; ty = unit}, no_effect
+    [] -> {expr = Blk []; ty = unit}, NoRec ESet.empty
   | [{stmt = SExpr e; _}] ->
       let e, eff = infer ctx e in
       {expr = Blk [TExpr e]; ty = e.ty}, eff
@@ -219,8 +224,8 @@ and infer_blk ctx loc = function
 and check_fun ctx l rt e =
   let loc = e.loc in
   let e, eff = infer ctx e in
-  let t = TFun (l, rt, no_effect) in
-  (if not (eqtype ~check_effect:false e.ty t) then
+  let t = TFun (l, rt, NoRec ESet.empty) in
+  (if not (eqtype ctx ~check_effect:false e.ty t) then
      error loc (fun fmt ->
          fprintf fmt
            "Expected a function of type %a, got an expression of type %a"
@@ -229,39 +234,39 @@ and check_fun ctx l rt e =
     TFun (_, _, eff') -> e, eff ++ eff'
   | _ -> failwith "internal error" (* impossible normalement *)
 
-let check_decl var {name; arg; res; body} =
-  let has_console = ref None in
+let check_decl var {name; args; res; body} =
   let ret_type, ret_eff = match res with
-      None -> new_tvar (), (ESet.singleton EDiv, Some has_console)
+      None -> new_tvar (), HasRec (ESet.singleton EDiv)
     | Some (eff, t) ->
         erase_type t, erase_effects eff
   in
-  let arg = List.map (fun (x, t) -> x, erase_type t) arg in
+  let arg = List.map (fun (x, t) -> x, erase_type t) args in
   let x, t = List.split arg in
   let var = SMap.add name.string (TFun (t, ret_type, ret_eff), false) var in
   let arg_map = build_argmap arg in
   let var = merge_ctx var arg_map in
-  let body, eff = check {var; ret_type; rec_fun = name.string } ret_type body in
+  let ctx = {var; ret_type; rec_fun = name.string ; rec_has_console = None} in
+  let body, eff = check ctx ret_type body in
   let ret_type, poly = remove_tvar ret_type in
   if poly then
     Error.error_str name.loc
       (sprintf "Function %s has polymporphic type" name.string);
   let eff =
-    match !has_console with
-      None -> eff
+    match ctx.rec_has_console with
+    | None -> eff
     | Some false ->
-      if ESet.mem EConsole (fst eff) then
+      if ESet.mem EConsole (get_set ctx eff) then
         error_str name.loc @@
         sprintf "Function %s has console effect while it shouldn't" name.string
       else eff
-    | _ -> add_effect eff EConsole
+    | _ -> eff ++ NoRec (ESet.singleton EConsole)
   in
-  let arg = List.map (fun (x, t) -> (x.string, t)) arg in
+  let formals = List.map (fun (x, t) -> (x.string, t)) arg in
   if res <> None then
-    if not ESet.(subset (fst eff) (fst ret_eff)) then
+    if not ESet.(subset (get_set ctx eff) (get_set ctx ret_eff)) then
       error_str name.loc @@
       sprintf "Function %s has ill defined effects." name.string;
-  {name = name.string; arg; body; res = TFun (t, ret_type, eff)}
+  {name = name.string; formals; body; res_type = TFun (t, ret_type, eff)}
 
 exception NoMain
 
@@ -273,17 +278,17 @@ let check_file (p : surface_decl list) =
       SMap.add x.string (t, false) mp
   in
   let rec check_file has_main var = function
-    | hd :: tl ->
+    | { name ; args ; body ; res } as hd :: tl ->
         let d = check_decl var hd in
         let has_main =
           if d.name = "main" then
-            if d.arg = [] then
+            if d.formals = [] then
               true
             else
               error_str hd.name.loc "Function main takes no argument"
           else has_main
         in
-        let var = add_function var (hd.name, d.res) in
+        let var = add_function var (name, d.res_type) in
         d :: check_file has_main var tl
     | [] ->
         if has_main then [] else

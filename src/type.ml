@@ -3,16 +3,6 @@ open Syntax
 open Syntax.Effect
 open Format
 
-type ctx =
-  { var : (pure_type * bool) SMap.t; ret_type : pure_type; rec_fun : string }
-
-let merge_ctx c1 c2 =
-  SMap.merge (fun _ v1 v2 ->
-      match v1, v2 with
-        None, None -> None
-      | _, Some v -> Some v
-      | Some v, _ -> Some v) c1 c2
-
 let valid_types =
   ["int", 0; "bool", 0; "unit", 0; "string", 0; "list", 1; "maybe", 1]
   |> List.to_seq |> SMap.of_seq
@@ -49,7 +39,7 @@ let rec remove_tvar = function
 let check_printable loc ({expr; ty} as e) =
     match fst (remove_tvar ty) with
     | TCon (("unit" | "bool" | "int" | "string") as s) ->
-       let pr_type = TFun ([ty], unit, add_effect no_effect EConsole) in
+       let pr_type = TFun ([ty], unit, NoRec (ESet.singleton EConsole)) in
        let print = { expr = Var ("println_" ^ s) ; ty = pr_type } in
        { expr = App (print, [e]) ; ty = unit }
     | _ ->
@@ -60,11 +50,11 @@ let check_printable loc ({expr; ty} as e) =
 let rec check_concatenable loc ({expr; ty} as e, e') =
   match fst (remove_tvar ty) with
   | TCon "string" ->
-      let cat_type = TFun ([ty; ty], ty, no_effect) in
+      let cat_type = TFun ([ty; ty], ty, NoRec ESet.empty) in
       let cat = { expr = Var "strcat" ; ty = cat_type } in
       { expr = App (cat, [e; e']) ; ty }
   | TApp ("list", _) ->
-      let cat_type = TFun ([ty; ty], ty, no_effect) in
+      let cat_type = TFun ([ty; ty], ty, NoRec ESet.empty) in
       let cat = { expr = Var "lstcat" ; ty = cat_type } in
       { expr = App (cat, [e; e']) ; ty }
   | _ ->
@@ -85,7 +75,7 @@ let check_equalable loc ({expr; ty} as e, op, e') =
   | TCon "int" | TCon "bool" ->
       {expr = Bop (e, op, e') ; ty = bool}
   | TCon "string" ->
-      let eq_type = TFun ([ty; ty], bool, no_effect) in
+      let eq_type = TFun ([ty; ty], bool, NoRec ESet.empty) in
       let eq = { expr = Var "streq" ; ty = eq_type } in
       { expr = App (eq, [e; e']) ; ty = bool }
   | _ ->
@@ -107,25 +97,24 @@ let rec check_occurs x = function
       | TVUnbd n when n = x -> raise Occurs
       | _ -> ()
 
-let rec eqtype  ?(check_effect=true) t t' = match t, t' with
+let rec eqtype env ?(check_effect=true) t t' = match t, t' with
   | TCon s, TCon s' -> s = s'
-  | TApp (f, t), TApp (f', t') -> f = f' && eqtype t t' ~check_effect
+  | TApp (f, t), TApp (f', t') -> f = f' && eqtype env t t' ~check_effect
   | TFun (arg, res, eff), TFun (arg', res', eff') ->
       begin try
-        if check_effect then
-          unify_effset eff eff';
-        List.for_all2 (eqtype ~check_effect) arg arg'
-        && eqtype ~check_effect res res'
+        (not check_effect || unify_effset env eff eff')
+        && List.for_all2 (eqtype env ~check_effect) arg arg'
+        && eqtype env ~check_effect res res'
       with
         Invalid_argument _ -> false
       end
   | TVar r, t' ->
       begin match !r with
-        TVLink t -> eqtype t t'
+        TVLink t -> eqtype env ~check_effect t t'
       | TVUnbd n ->
           check_occurs n t'; r := TVLink t'; true
       end
-  | _, TVar _ -> eqtype t' t
+  | _, TVar _ -> eqtype env ~check_effect t' t
   | _, _ -> false
 
 let tvar = ref 0

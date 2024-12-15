@@ -1,4 +1,10 @@
 _build/*
+*.aux
+*~
+*.bbl
+*.blg
+*latexmk
+*.xml
 *.exe
 *.automaton
 *.conflicts

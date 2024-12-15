@@ -60,6 +60,7 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
   | ABop (e1, Dif, e2) ->
       let a, d = gen_expr ret ({aexpr = ABop (e1, Eq, e2); aty}) in
       a ++ xorq (imm 1) !%rax, d
+  | ABop (_, Cat, _) -> failwith "impossible"
   | ABlk l -> gen_blk ret l
   | AIf (c, t, f) ->
       let ac, dc = gen_expr ret c in
@@ -315,9 +316,11 @@ int_mod:
 
 kk_streq:
 	xorl	%eax, %eax
+	movq	16(%rsp), %rsi
+	movq	8(%rsp), %rdi
 .loop1:
 	movb	(%rax, %rdi), %cl
-	movb	(%rax, %rdi), %dl
+	movb	(%rax, %rsi), %dl
 	testb	%dl, %dl
 	jz	.ret3
 	testb	%cl, %cl

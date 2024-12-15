@@ -204,7 +204,7 @@ let funbody(expr) :=
 
 decl:
     FUN name = string_loc fb = funbody(expr) SCOL+
-    { let arg, res, body = fb in { name; arg; body; res } }
+    { let args, res, body = fb in { name; args; body; res } }
 ;
 
 file: SCOL* l = decl* EOF { l } ;

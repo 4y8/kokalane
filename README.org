@@ -1,0 +1,2 @@
+* kokalane
+  ~kokalane~ est un compilateur pour le langage Petit Koka.

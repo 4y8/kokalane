@@ -23,6 +23,8 @@ end = struct
 end
 module ESet = Set.Make(Effect)
 
+type effect = HasRec of ESet.t | NoRec of ESet.t
+
 type surface_type_desc
   = STCon of string | STApp of string_loc * surface_type
   | STFun of surface_type list * surface_type * string_loc list
@@ -30,7 +32,7 @@ and surface_type = { stype : surface_type_desc ; loc : loc * loc }
 
 type pure_type
   = TCon of string | TApp of string * pure_type
-  | TFun of pure_type list * pure_type * (ESet.t * bool option ref option)
+  | TFun of pure_type list * pure_type * effect
   | TVar of tvar ref
 and tvar = TVUnbd of int | TVLink of pure_type
 
@@ -109,10 +111,10 @@ and annot_stmt
   | ADVar of int * annot_expr
   | ADVal of int * annot_expr
 
-type ('a, 'b, 'c, 'd) decl =
-  { name : 'd ; arg : ('d * 'b) list; res : 'c
-  ; body : 'a }
+type surface_decl =
+  { name : string_loc ; args : (string_loc * surface_type) list
+  ; res : result option ; body : surface_expr}
 
-type surface_decl = (surface_expr, surface_type, result option, string_loc) decl
-
-type decl_type = (typed_expr, typed_expr, pure_type, string) decl
+type typed_decl =
+  { name : string ; formals : (string * pure_type) list ; body : typed_expr
+  ; res_type : pure_type }

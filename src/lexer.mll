@@ -38,13 +38,11 @@
     let m = Stack.top indent in
       if c < m then begin
         ignore (Stack.pop indent);
-        let l =
-          if next <> RCUR then
-            [RCUR]
-          else []
-        in
-        l @ loop c loc next t
-      end else if c > m then Error.error_str loc "Wrong indentation"
+        if next <> RCUR
+        then RCUR :: loop c loc next t
+        else loop c loc next t
+      end
+      else if c > m then Error.error_str loc "Wrong indentation"
       else
         if not TSet.(mem !last end_con) && not TSet.(mem next beg_con)
         then SCOL :: t
@@ -58,7 +56,6 @@
     let loc = Lexing.lexeme_start_p lexbuf, Lexing.lexeme_end_p lexbuf in
     let t = lexer lexbuf in
     let next = List.hd t in
-    let c = if next = EOF then 0 else c in
     let m = Stack.top indent in
     if c > m
     then begin
@@ -69,9 +66,6 @@
          t)
     end else
       loop c loc next t
-
-  let insert_nl lexbuf =
-    String.iter (fun c -> if c = '\n' then Lexing.new_line lexbuf)
 }
 
 let digit = ['0'-'9']
@@ -89,8 +83,7 @@ let blank_line = [' ' '\t' '\r']* ("//" [^'\n']*)? '\n'
 
 rule lexer = parse
   | [' ' '\t' '\r'] { lexer lexbuf }
-  | blank_line
-    { Lexing.new_line lexbuf; blank_lines lexbuf }
+  | blank_line { Lexing.new_line lexbuf; blank_lines lexbuf }
   | "++" { [DPLUS] }
   | "+" { [PLUS] }
   | "->" { [ARR] }
@@ -127,7 +120,14 @@ rule lexer = parse
     None -> [IDENT s] | Some t -> [t] }
   | "True" { [TRUE] }
   | "False" { [FALSE] }
-  | '"' { [STRING (string [] lexbuf)] }
+  (* en modifiant lex_start_p on affiche la bonne position pour la chaine de
+     caractères, mais s'il y a une erreur de syntaxe, le token affiché est faux
+     (on n'affiche que le guillemet final) *)
+  | '"'
+      { let spos = lexbuf.lex_start_p in
+        let s = string [] lexbuf in
+        lexbuf.lex_start_p <- spos;
+        [STRING s] }
   | eof { eof lexbuf }
   | _ as c { error lexbuf (Printf.sprintf "Unknown character : %c" c) }
 
@@ -152,8 +152,7 @@ and string acc = parse
   | _ as c { string (c :: acc) lexbuf }
 
 and begin_line_comment = parse
-  | "*/" blank_line
-    { Lexing.new_line lexbuf; blank_lines lexbuf }
+  | "*/" blank_line { Lexing.new_line lexbuf; blank_lines lexbuf }
   | "*/" eof { eof lexbuf }
   | "*/" { error lexbuf "Comment disturbing indentation" }
   | eof { error lexbuf "Unterminated comment" }

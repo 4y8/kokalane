@@ -1,0 +1,9 @@
+fun g(f : () -> <div> ())
+  ()
+
+fun f()
+  g(f)
+  println(42)
+
+fun main()
+  println("")

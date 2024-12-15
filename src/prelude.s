@@ -150,9 +150,11 @@ int_mod:
 
 kk_streq:
 	xorl	%eax, %eax
+	movq	16(%rsp), %rsi
+	movq	8(%rsp), %rdi
 .loop1:
 	movb	(%rax, %rdi), %cl
-	movb	(%rax, %rdi), %dl
+	movb	(%rax, %rsi), %dl
 	testb	%dl, %dl
 	jz	.ret3
 	testb	%cl, %cl

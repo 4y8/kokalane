@@ -1,5 +1,9 @@
 open Syntax
 
+(* on a beaucoup de mutabilité pour rien; peut être séparer le type en deux car
+   clo et max_var sont destinées à être modifiées de manière persistente à
+   l'échelle d'une fonction, mais pas loc (avec des modifications locales à
+   l'échelle des blocs)*)
 type env =
   { mutable loc : variable SMap.t ; par : variable SMap.t
   ; mutable clo : (int * bool) SMap.t ; mutable nvar : int
@@ -119,7 +123,7 @@ let rec annot env {expr; ty} =
        return e.aexpr
     | Fun (l, e) ->
         let nenv =
-          { loc = arg_env l ; par = Type.merge_ctx env.par env.loc
+          { loc = arg_env l ; par = Context.merge_ctx env.par env.loc
           ; clo = SMap.empty ; nvar = 0 ; nclo = 0 ; max_var = 0 }
         in
         let* e = annot nenv e in
@@ -136,7 +140,7 @@ let annot_program p =
       [] -> return ()
     | hd :: tl ->
         let env =
-          { loc = arg_env hd.arg ; par = SMap.empty ; clo = SMap.empty ;
+          { loc = arg_env hd.formals ; par = SMap.empty ; clo = SMap.empty ;
             nvar = 0 ; nclo = 0 ; max_var = 0 }
         in
         let* e = annot env hd.body in

@@ -1,59 +1,42 @@
 open Syntax
 open Syntax.Effect
+open Context
 open Format
 open Error
 
-exception EffectUnification
-
 let valid_effects_list = ["div", EDiv; "console", EConsole]
 
-let valid_effects =
-  valid_effects_list |> List.to_seq |> SMap.of_seq
+let valid_effects = valid_effects_list |> List.to_seq |> SMap.of_seq
 
-let (++) (eff, constr) (eff', constr') =
-  ESet.union eff eff', if constr = None then constr' else constr
+let (++) e e' =
+  match e, e' with
+  | NoRec s, NoRec s' -> NoRec (ESet.union s s')
+  | NoRec s, HasRec s' | HasRec s, NoRec s' | HasRec s, HasRec s' ->
+      HasRec (ESet.union s s')
 
-let add_effect (eff, constr) e =
-  ESet.add e eff, constr
+let unify_effset env e e' = match e, e' with
+  | NoRec s, NoRec s' -> s = s'
+  | NoRec s, HasRec s' | HasRec s', NoRec s ->
+      let sconsole = ESet.mem EConsole s in
+      (match env.rec_has_console with
+         None -> env.rec_has_console <- Some sconsole; true
+       | Some b -> b = sconsole) && ESet.mem EDiv s = ESet.mem EDiv s'
+  | HasRec s, HasRec s' ->
+      if ESet.mem EConsole s <> ESet.mem EConsole s' then
+        (match env.rec_has_console with
+          None -> env.rec_has_console <- Some true; true
+        | Some b -> b) && ESet.mem EDiv s = ESet.mem EDiv s'
+      else ESet.mem EDiv s = ESet.mem EDiv s'
 
-let no_effect = ESet.empty, None
-
-(* à simplifier *)
-let unify_effset ((eff, constr) as e) ((eff', constr') as e') =
-  if ESet.mem EDiv eff && not ESet.(mem EDiv eff') || ESet.mem EDiv eff' && not ESet.(mem EDiv eff) then
-    raise EffectUnification
-  else
-    let has_console (eff, constr) =
-      ESet.mem EConsole eff || match constr with
-        None -> false
-      | Some r -> match !r with
-          None -> false
-        | Some b -> b
-    in
-    let unify_console (eff, constr) (eff', constr') =
-      if has_console (eff, constr) && not ESet.(mem EConsole eff') then
-        begin match constr' with
-          None -> raise EffectUnification
-        | Some r ->
-            match !r with
-              Some false -> raise EffectUnification
-            | _ -> r := Some true
-        end;
-      if not ESet.(mem EConsole eff') then
-        match constr with
-          None -> ()
-        | Some r ->
-            match !r with
-              Some true -> raise EffectUnification
-            | _ -> r := Some false
-    in
-    unify_console e e';
-    unify_console e' e
+let get_set ctx = function
+    NoRec s -> s
+  | HasRec s when ctx.rec_has_console = Some true -> ESet.add EConsole s
+  | HasRec s -> s
 
 let erase_effect {string; loc} =
   match SMap.find_opt string valid_effects with
-    None -> error_str loc @@ sprintf "Unknown effect: %s" string
+  | None -> error_str loc @@ sprintf "Unknown effect: %s" string
   | Some e -> e
 
 let erase_effects l =
-  (List.map erase_effect l |> ESet.of_list, None)
+  NoRec (List.map erase_effect l |> ESet.of_list)

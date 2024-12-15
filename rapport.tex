@@ -1,13 +1,14 @@
 \documentclass[11pt]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage[a4paper, margin=1.2in]{geometry}
+\usepackage[french]{babel}
+\usepackage[a4paper, left=1.2in, right=1.2in]{geometry}
 
 \usepackage[backend=bibtex]{biblatex}
 \addbibresource{rapport.bib}
 
 \author{Aghilas Y. Boussaa}
-\title{Premier rapport du compilateur mini-koka}
+\title{Premier rapport du compilateur \textsf{Petit Koka}}
 \begin{document}
 \maketitle
 \section{Le compilateur}
@@ -18,6 +19,11 @@ production de code.
 Pour l'analyse lexicale on implémente l'algorithme donné
 dans l'énoncé, en utilisant une file permettant au lexer de renvoyer plusieurs
 lexèmes en une fois.
+
+Pour l'indentation, on a fait le choix, de ne prendre en compte que les espaces
+pour éviter de choisir une valeure arbitraire pour les tabulations. En
+particulier, deux espaces suivies d'une tabulation puis d'une autre espace
+compte comme une indentation de deux.
 
 \subsection{Analyse syntaxique}
 Pour l'analyse syntaxique on modifie la grammaire donnée pour la rendre LR(1)
@@ -68,7 +74,7 @@ type pour \texttt{f} dans \texttt{f}, et le compilateur doit rejeter ce
 programme car \texttt{f} a l'effet \texttt{console} à cause de la dernière
 ligne. Les effets sont, donc, représentés comme un ensemble d'effet muni d'une
 référence optionnelle vers un booléen optionnel. L'ensemble représente les
-effets
+effets comme dans une implémentation naïve, et la référence 
 
 \begin{figure}[h]\label{code1}
 \begin{verbatim}
