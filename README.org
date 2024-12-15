@@ -1,3 +1,14 @@
 * kokalane
-  ~kokalane~ est un compilateur pour le langage Petit Koka. Pour obtenir un
-  executable
+  ~kokalane~ est un compilateur pour le langage Petit Koka. On peut lancer la
+  commande ~make~ pour créer un executable ~kokac~ (pour l'utiliser : ~./kokac
+  [options] fichier.koka~).
+
+  Le rapport est dans le fichier =rapport.pdf= et le code du compilateur dans le
+  dossier =src=. Le code est organisé de la manière suivante :
++ =lexer.mll= et =parser.mly= pour l'analyse lexicale et sémantique,
++ =syntax.ml= pour décrire les différentes représentations intermédiaires,
++ =context.ml=, =type.ml=, =effect.ml= et =infer.ml= pour le typage,
++ =annot.ml=, =x86_64.ml=, =prelude.s= et =codegen.ml= pour la production de
+  code,
++ =error.ml= et =pprint.ml= pour la gestion d'erreur, et,
++ =kokalane.ml= pour lier le tout.
