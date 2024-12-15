@@ -7,7 +7,7 @@
 \usepackage[backend=bibtex]{biblatex}
 \addbibresource{rapport.bib}
 
-\author{Aghilas Y. Boussaa}
+\author{Aghilas Y. Boussaa \texttt{<aghilas.boussaa@ens.fr>}}
 \title{Premier rapport du compilateur \textsf{Petit Koka}}
 \begin{document}
 \maketitle
@@ -16,33 +16,34 @@ Le compilateur passe tous les tests d'analyse syntaxique, de typage et de
 production de code.
 
 \subsection{Analyse lexicale}
-Pour l'analyse lexicale on implémente l'algorithme donné
-dans l'énoncé, en utilisant une file permettant au lexer de renvoyer plusieurs
-lexèmes en une fois.
+Pour l'analyse lexicale, on implémente l'algorithme donné dans l'énoncé, en
+utilisant une file permettant au \textit{lexer} de renvoyer plusieurs lexèmes en une
+fois.
 
-Pour l'indentation, on a fait le choix, de ne prendre en compte que les espaces
-pour éviter de choisir une valeure arbitraire pour les tabulations. En
+Pour l'indentation, on a fait le choix de ne prendre en compte que les espaces
+pour éviter de choisir une valeur arbitraire pour les tabulations. En
 particulier, deux espaces suivies d'une tabulation puis d'une autre espace
 compte comme une indentation de deux.
 
 \subsection{Analyse syntaxique}
-Pour l'analyse syntaxique on modifie la grammaire donnée pour la rendre LR(1)
-(en particulier, on n'utilise les directives d'associativités que pour les
-opérateurs binaires). On a fait ce choix sur recommandation de François Pottier
-donnée après un ``rapport de bug''\footnote{suite à l'utilisation de directives
-menhir a renvoyé une erreur: \texttt{Conflict (unexplicable) [...] Please send
-  your grammar to Menhir's developers}, il s'agit, d'après la réponse reçu par
-mail, d'un problème connu que l'on peut éviter en donnant une grammaire
-LR(1)}. Certaines constructions syntaxiques ont nécessités une attention
+Pour l'analyse syntaxique, on modifie la grammaire donnée pour la rendre LR(1)
+(en particulier, on n'utilise les directives d'associativité que pour les
+opérateurs binaires). On a fait ce choix sur une recommandation de François
+Pottier donnée après un ``rapport de bug''\footnote{suite à l'utilisation de
+directives, \texttt{menhir} a renvoyé une erreur: \texttt{Conflict
+  (unexplicable) [...]  Please send your grammar to Menhir's developers}, il
+s'agit, d'après la réponse reçu par mail, d'un problème connu que l'on peut
+éviter en donnant une grammaire LR(1) (de ce que j'ai compris en tout
+cas)}. Certaines constructions syntaxiques ont nécessité une attention
 particulière:
 \begin{itemize}
   \item les opérateurs binaires doivent traiter à part l'expression la plus à
     droite car elle peut être de la forme \texttt{return 1}, alors que
     \texttt{return 1 + 2} est interprété comme \texttt{return (1 + 2)},
-  \item pour traiter le problème du sinon pendouillant, on distingue a une règle
+  \item pour traiter le problème du \textit{sinon pendouillant}, on a une règle
     à part générant des expressions ne pouvant pas être suivie par des
     \texttt{else},
-  \item pout traiter l'associativité à gauche des \texttt{fn} infixes on
+  \item pout traiter l'associativité à gauche des \texttt{fn} infixes, on
     remarque qu'un atome a, à droite, soit un atome, soit un atome suivi du mot
     clé \texttt{fn} puis d'une expression se terminant par un bloc (une
     expression se terminant par un atome ou un bloc); on crée donc une règle
@@ -51,12 +52,12 @@ particulière:
 \end{itemize}
 
 \subsection{Typage}
-Pour le typage on implémente l'algorithme J d'inférence de type sans la
-généralisation ni l'instantiation, auquel on ajoute les effets. Pour les
+Pour le typage, on implémente l'algorithme J d'inférence (comme en TD) de type
+sans la généralisation ni l'instantiation, auquel on ajoute les effets. Pour les
 fonctions de librairies standards qui ont du polymorphisme d'effet, on vérifie
 que les types ont la bonne forme sans se soucier des effets.
 
-\begin{figure}[h]\label{code2}
+\begin{figure}[h]
 \begin{verbatim}
 fun g(f : () -> <div> ())
   ()
@@ -65,54 +66,55 @@ fun f()
   g(f)
   println(42)
 \end{verbatim}
-\caption{un exemple nécessitant une variable d'effet}
+\caption{un exemple nécessitant une variable d'effet}\label{code2}
 \end{figure}
 
 Le code de la figure~\ref{code2} montre que l'on ne peut se contenter de gérer
 les effets de manière naïve avec seulement des ensembles, car il faut choisir un
-type pour \texttt{f} dans \texttt{f}, et le compilateur doit rejeter ce
-programme car \texttt{f} a l'effet \texttt{console} à cause de la dernière
-ligne. Ce type d'indétermination n'arrive que pour les fonctions récursives, et
-seulement pour l'effet \texttt{console} (dans \textsf{Petit Koka}, en tout cas),
-car une fonction récursive a toujours l'effet \texttt{div}. On distingue, donc,
-deux types d'ensemble d'effets, ceux qui incluent les effets indéterminés de la
-fonction qu'on est en train d'analyser (constructeur \texttt{HasRec}), et les
-autres (constructeur \texttt{NoRec}). On ajoute, alors, au contexte un booléen
-optionnel (\texttt{rec\_has\_console}) indiquant une éventuelle contrainte sur
-l'effet \texttt{console} issue de l'unification.
+type pour \texttt{f} lorsqu'on analyse \texttt{f}, et le compilateur doit
+rejeter ce programme puisque \texttt{f} a l'effet \texttt{console} à cause de la
+dernière ligne. Ce type d'indétermination n'arrive que pour les fonctions
+récursives, et seulement pour l'effet \texttt{console} (dans \textsf{Petit
+  Koka}, en tout cas), comme une fonction récursive a toujours l'effet
+\texttt{div}. On distingue, donc, deux types d'ensemble d'effets, ceux qui
+incluent les effets indéterminés de la fonction qu'on est en train d'analyser
+(constructeur \texttt{HasRec}), et les autres (constructeur \texttt{NoRec}). On
+ajoute, alors, au contexte un booléen optionnel (\texttt{rec\_has\_console})
+indiquant une éventuelle contrainte sur l'effet \texttt{console} issue de
+l'unification.
 
-\begin{figure}[h]\label{code1}
+\begin{figure}[h]
 \begin{verbatim}
 fun f()
   println(f())
   1
 \end{verbatim}
-\caption{les GADT à la rescousse}
+\caption{les GADT à la rescousse}\label{code1}
 \end{figure}
 
 Le code de la figure~\ref{code1} montre que le typage ne peut pas être que
-linéaire, car à la deuxième ligne, le typeur ne sais pas encore que \texttt{f()}
-est affichable. Pour résoudre ce problème le typeur peut ajouter des contraintes
-qui ne seront testées qu'après la première passe de typage (en même temps que
-l'explicitation des fermetures), aussi bien pour l'affichage que pour les
-opérations binaires polymorphes. On pourrait se contenter de garder des listes
-globales de variable de types pour chaque ``classe de type'' et les vérifier à
-la fin.
+linéaire, car à la deuxième ligne, le typeur ne sait pas encore que \texttt{f()}
+est affichable. Pour résoudre ce problème, le typeur peut ajouter des
+contraintes qui ne seront testées qu'après la première passe de typage (en même
+temps que l'explicitation des fermetures), aussi bien pour l'affichage que pour
+les opérations binaires polymorphes. On pourrait se contenter de garder des
+listes globales de variables de types pour chaque ``classe de type'' et les
+vérifier à la fin.
 
 Cependant, les informations apportées par ces tests peuvent alléger les phases
 suivantes si on les garde: on peut, par exemple, remplacer les appels à
-\texttt{println} par des appels à des fonctions monomorphes. Pour faire cela, on
-voudrait créer un constructeur \texttt{CheckConstraint of typed\_expr *
+\texttt{println} par des appels à de simples fonctions monomorphes. Pour faire
+cela, on peut créer un constructeur \texttt{CheckConstraint of typed\_expr *
   typed\_expr -> typed\_expr}, où la fonction permet, par exemple, de
 transformer l'expression \texttt{e} donnée en \texttt{println\_t(e)} si le type
 \texttt{t} de \texttt{e} peut s'afficher.
 
-En revanche, cela, ne marche pas pour les opérateurs binaires tels que
-\texttt{++} pour lesquels on voudrait une fonction prenant deux expressions. On
-pourrait mettre une liste en argument mais cela ajouterait du filtrage par motif
-redondant. Les GADT nous permettent, enfin, d'avoir un constructeur
-\texttt{\texttt{CheckConstraint : 'b * ('b -> typed\_expr) -> typed\_desc}},
-sans que la variable de type n'apparaîssent dans le type des expressions.
+En revanche, cela ne marche pas pour les opérateurs binaires tels que
+\texttt{++} pour lesquels on voudrait une fonction prenant deux expressions, ou
+pour de futures extensions. Les GADT nous permettent, enfin, d'avoir un
+constructeur \texttt{\texttt{CheckConstraint : 'b * ('b -> typed\_expr) ->
+    typed\_desc}}, sans que la variable de type n'apparaisse dans le type des
+expressions.
 
 \subsection{Production de code}
 Après le typage, on explicite les fermetures et les positions des variables sur
