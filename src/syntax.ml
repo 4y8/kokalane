@@ -4,8 +4,7 @@ type bop =
 
 type uop = Neg | Not
 
-type lit =
-    LUnit | LInt of int | LBool of bool | LString of string
+type lit = LUnit | LInt of int | LBool of bool | LString of string
 
 type loc = Lexing.position
 
@@ -38,12 +37,15 @@ and tvar = TVUnbd of int | TVLink of pure_type
 
 type result = string_loc list * surface_type
 
+type surface_cons = CVar of string_loc | CCons of string * surface_cons list
+
 type surface_desc
   = SIf  of surface_expr * surface_expr * surface_expr
   | SBop of surface_expr * bop * surface_expr
   | SRet of surface_expr
   | SVar of string
   | SLit of lit
+  | SMat of surface_expr * (surface_cons * surface_expr) list
   | SApp of surface_expr * surface_expr list
   | SWal of string_loc * surface_expr
   | SFun of (string_loc * surface_type) list * result option * surface_expr
@@ -51,14 +53,14 @@ type surface_desc
   | SLst of surface_expr list
   | SUop of uop * surface_expr
 and surface_expr =
-  { sexpr : surface_desc; sloc : loc * loc }
+  { sexpr : surface_desc ; sloc : loc * loc }
 
 and surface_stmt_desc
   = SExpr of surface_expr
   | SDVar of string * surface_expr
   | SDVal of string * surface_expr
 and surface_stmt =
-  {stmt : surface_stmt_desc; stmloc : loc * loc}
+  { stmt : surface_stmt_desc ; stmloc : loc * loc }
 
 (* on utilise des GADTs pour le cas CheckPredicate qui permet de différer
    certains tests (par exemple ceux s'apparentant à des classes de types, comme
@@ -111,9 +113,11 @@ and annot_stmt
   | ADVar of int * annot_expr
   | ADVal of int * annot_expr
 
-type surface_decl =
-  { name : string_loc ; args : (string_loc * surface_type) list
-  ; res : result option ; body : surface_expr}
+type surface_decl
+  = SDeclFun of
+      { name : string_loc ; args : (string_loc * surface_type) list
+      ; res : result option ; body : surface_expr }
+  | SDeclType of (string_loc * surface_type) list
 
 type typed_decl =
   { tname : string ; targs : (string * pure_type) list ; tbody : typed_expr

@@ -4,7 +4,7 @@
   let ident_tbl = Hashtbl.create 63
 
   let _ = List.iter (fun (k, v) -> Hashtbl.add ident_tbl k v)
-    ["else", ELSE; "fn", FN; "fun", FUN; "if", IF;
+    ["else", ELSE; "fn", FN; "fun", FUN; "if", IF; "type", TYPE; "match", MATCH;
      "return", RETURN; "then", THEN; "val", VAL; "var", VAR]
 
   let error = Error.error_str_lexbuf
@@ -74,9 +74,9 @@ let lower = lowerl | '_'
 let upper = ['A'-'Z']
 let other = lower | upper | digit
 let ident =
-   ((lower | (lowerl '-' (upper | lowerl)))
-    (other | (lowerl | upper | digit) '-' (lowerl | upper))*
-    ((lowerl | upper | digit) '-' | '\''*))
+  (lower | (lowerl '-' (upper | lowerl)))
+  (other | (lowerl | upper | digit) '-' (lowerl | upper))*
+ ((lowerl | upper | digit) '-' | '\''*)
  | lowerl '-'
 
 let blank_line = [' ' '\t' '\r']* ("//" [^'\n']*)? '\n'

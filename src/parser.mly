@@ -8,7 +8,7 @@
       | _ -> SApp ({sexpr; sloc}, [x])
 %}
 
-%token ELSE FN FUN IF RETURN THEN VAL VAR
+%token ELSE FN FUN IF RETURN THEN VAL VAR TYPE MATCH
 %token <string>STRING
 %token <int>INT
 %token <string>IDENT
@@ -204,7 +204,7 @@ let funbody(expr) :=
 
 decl:
     FUN name = string_loc fb = funbody(expr) SCOL+
-    { let args, res, body = fb in { name; args; body; res } }
+    { let args, res, body = fb in SDeclFun { name; args; body; res } }
 ;
 
 file: SCOL* l = decl* EOF { l } ;
