@@ -79,6 +79,12 @@ let ident =
  ((lowerl | upper | digit) '-' | '\''*)
  | lowerl '-'
 
+let upident =
+  (upper ('-' (upper | lowerl))?)
+  (other | (lowerl | upper | digit) '-' (lowerl | upper))*
+ ((lowerl | upper | digit) '-' | '\''*)
+ | upper '-'
+
 let blank_line = [' ' '\t' '\r']* ("//" [^'\n']*)? '\n'
 
 rule lexer = parse
@@ -118,8 +124,7 @@ rule lexer = parse
   | "elif" { [ELSE; IF] }
   | ident as s { match Hashtbl.find_opt ident_tbl s with
     None -> [IDENT s] | Some t -> [t] }
-  | "True" { [TRUE] }
-  | "False" { [FALSE] }
+  | upident as s { [CON s] }
   (* en modifiant lex_start_p on affiche la bonne position pour la chaine de
      caractères, mais s'il y a une erreur de syntaxe, le token affiché est faux
      (on n'affiche que le guillemet final) *)

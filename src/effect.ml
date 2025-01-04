@@ -18,19 +18,19 @@ let unify_effset env e e' = match e, e' with
   | NoRec s, NoRec s' -> s = s'
   | NoRec s, HasRec s' | HasRec s', NoRec s ->
       let sconsole = ESet.mem EConsole s in
-      (match env.rec_has_console with
-         None -> env.rec_has_console <- Some sconsole; true
+      (match !(env.rec_has_console) with
+         None -> env.rec_has_console := Some sconsole; true
        | Some b -> b = sconsole) && ESet.mem EDiv s = ESet.mem EDiv s'
   | HasRec s, HasRec s' ->
       if ESet.mem EConsole s <> ESet.mem EConsole s' then
-        (match env.rec_has_console with
-          None -> env.rec_has_console <- Some true; true
+        (match !(env.rec_has_console) with
+          None -> env.rec_has_console := Some true; true
         | Some b -> b) && ESet.mem EDiv s = ESet.mem EDiv s'
       else ESet.mem EDiv s = ESet.mem EDiv s'
 
 let get_set ctx = function
     NoRec s -> s
-  | HasRec s when ctx.rec_has_console = Some true -> ESet.add EConsole s
+  | HasRec s when !(ctx.rec_has_console) = Some true -> ESet.add EConsole s
   | HasRec s -> s
 
 let erase_effect {string; strloc} =

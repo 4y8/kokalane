@@ -167,31 +167,29 @@ let rec infer ctx {sexpr; sloc} = match sexpr with
         | None -> eff
         | Some (e, _) ->
             let ret_eff = erase_effects e in
-           if ESet.subset (get_set ctx eff) (get_set ctx ret_eff) then
-             ret_eff
-           else
-             error_str sloc "Anonymous function has ill defined effects"
+            if ESet.subset (get_set ctx eff) (get_set ctx ret_eff) then
+              ret_eff
+            else
+              error_str sloc "Anonymous function has ill defined effects"
       in
       let arg = List.map (fun (x, t) -> (x.string, t)) arg in
-      (match nctx.rec_has_console, ctx.rec_has_console with
-        Some b, Some b' when b <> b' ->
-          error_str sloc
-            (sprintf "Function %s has ill defined effects" ctx.rec_fun)
-      | s, None -> ctx.rec_has_console <- s
-      | _ -> ());
       { texpr = Fun (arg, body) ; ty = TFun (tys, body.ty, eff) },
       NoRec ESet.empty
 
-and check ctx t {sexpr; sloc} =
-  let e, eff = infer ctx {sexpr; sloc} in
+and check_type ctx t t' ?(check_effect=true) sloc =
   try
-    if eqtype ctx t e.ty then e, eff else
-      Error.type_mismatch sloc t e.ty
+    if not (eqtype ctx t t' ~check_effect) then
+      Error.type_mismatch sloc t t'
   with
     Occurs ->
       error sloc (fun fmt ->
           fprintf fmt "Occurs check failed between types %a and %a"
-            Pprint.fmt_type t Pprint.fmt_type e.ty)
+            Pprint.fmt_type t Pprint.fmt_type t')
+
+and check ctx t {sexpr; sloc} =
+  let e, eff = infer ctx {sexpr; sloc} in
+  check_type ctx t e.ty sloc;
+  e, eff
 
 and infer_blk ctx sloc = function
   | [] -> { texpr = Blk [] ; ty = unit }, NoRec ESet.empty
@@ -225,20 +223,27 @@ and infer_blk ctx sloc = function
           let tl, ty = get_tl_blk tl in
           { texpr = Blk (TDVar (x, e) :: tl) ; ty }, eff ++ eff'
 
-(* la fonction ne sera pas appelé avec des variables de types dans l, pas besoin
-   de traiter l'exception occurs check *)
 and check_fun ctx l rt e =
-  let loc = e.sloc in
-  let e, eff = infer ctx e in
+  let e', eff = infer ctx e in
   let t = TFun (l, rt, NoRec ESet.empty) in
-  (if not (eqtype ctx ~check_effect:false e.ty t) then
-     error loc (fun fmt ->
-         fprintf fmt
-           "Expected a function of type %a, got an expression of type %a"
-           Pprint.fmt_type t Pprint.fmt_type e.ty));
-  match fst (remove_tvar e.ty) with
-    TFun (_, _, eff') -> e, eff ++ eff'
+  check_type ctx ~check_effect:false e'.ty t e.sloc;
+  match fst (remove_tvar e'.ty) with
+  | TFun (_, _, eff') -> e', eff ++ eff'
   | _ -> failwith "internal error" (* impossible normalement *)
+
+and check_pattern ctx t = function
+  | CVar v -> SMap.singleton v.string t
+  | CCon (s, l) ->
+      let arg, res = inst_cons (SMap.find s.string ctx.cons) in
+      check_type ctx res t s.strloc;
+      let merge x t t' = match t, t' with
+        | None, t | t, None -> t
+        | Some _, Some _ ->
+            error_str s.strloc
+              (sprintf "Variable %s is defined twice in pattern" x)
+      in
+      List.map2 (check_pattern ctx) arg l
+      |> List.fold_left (SMap.merge merge) SMap.empty
 
 let check_decl var {name; args; res; body} =
   let ret_type, ret_eff = match res with
@@ -251,14 +256,17 @@ let check_decl var {name; args; res; body} =
   let var = SMap.add name.string (TFun (t, ret_type, ret_eff), false) var in
   let arg_map = build_argmap arg in
   let var = merge_ctx var arg_map in
-  let ctx = {var; ret_type; rec_fun = name.string ; rec_has_console = None} in
+  let ctx =
+    { var ; ret_type ; rec_fun = name.string ; rec_has_console = ref None
+    ; cons = SMap.empty } (* todo cons *)
+  in
   let tbody, eff = check ctx ret_type body in
   let ret_type, poly = remove_tvar ret_type in
   if poly then
-    Error.error_str name.strloc
+    error_str name.strloc
       (sprintf "Function %s has polymporphic type" name.string);
   let eff =
-    match ctx.rec_has_console with
+    match !(ctx.rec_has_console) with
     | None -> eff
     | Some false ->
       if ESet.mem EConsole (get_set ctx eff) then
@@ -281,7 +289,7 @@ let check_decl var {name; args; res; body} =
 
 exception NoMain
 
-let check_file (p : surface_decl list) =
+let check_file p =
   let add_function mp (x, t) =
     if SMap.mem x.string mp then
       error_str x.strloc (sprintf "Function %s defined twice" x.string)
@@ -289,18 +297,19 @@ let check_file (p : surface_decl list) =
       SMap.add x.string (t, false) mp
   in
   let rec check_file has_main var = function
-    | { name ; _ } as hd :: tl ->
+    | SDeclFun hd :: tl ->
         let d = check_decl var hd in
         let has_main =
           if d.tname = "main" then
             if d.targs = [] then
               true
             else
-              error_str name.strloc "Function main takes no argument"
+              error_str hd.name.strloc "Function main takes no argument"
           else has_main
         in
-        let var = add_function var (name, d.res_type) in
+        let var = add_function var (hd.name, d.res_type) in
         d :: check_file has_main var tl
+    | SDeclType _ :: _ -> failwith "todo"
     | [] ->
         if has_main then [] else
           raise NoMain

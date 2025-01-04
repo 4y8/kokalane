@@ -117,15 +117,10 @@ let rec eqtype env ?(check_effect=true) t t' = match t, t' with
   | _, TVar _ -> eqtype env ~check_effect t' t
   | _, _ -> false
 
-let tvar = ref 0
-
-let new_tvar () =
-  incr tvar; TVar (ref (TVUnbd !tvar))
-
 let rec erase_type {stype; tloc} = match stype with
   | STCon s ->
       begin match SMap.find_opt s valid_types with
-        Some 0 -> TCon s
+      | Some 0 -> TCon s
       | None ->
           Error.error_str tloc @@ sprintf "Unknown type constructor: %s" s
       | Some n ->

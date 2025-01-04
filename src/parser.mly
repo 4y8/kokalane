@@ -12,12 +12,12 @@
 %token <string>STRING
 %token <int>INT
 %token <string>IDENT
+%token <string>CON
 %token OR AND
 %token PLUS MINUS TIMES DIV MOD LEQ GEQ EQ DIF ASS WAL ARR DPLUS
 %token LPAR RPAR LCUR RCUR LANG RANG LSQU RSQU
 %token SCOL DOT DCOL COMMA EOF
 %token BANG TILDE
-%token TRUE FALSE
 %token DUMMY
 %start file
 %type <surface_decl list> file
@@ -38,8 +38,6 @@ let loc_expr(expr) ==
 let lit :=
   | ~ = INT; <LInt>
   | ~ = STRING; <LString>
-  | TRUE; { LBool true }
-  | FALSE; { LBool false }
   | LPAR; RPAR; { LUnit }
 
 string_loc: string = IDENT { {string; strloc = $startpos, $endpos} } ;
@@ -75,7 +73,17 @@ ty:
   | stype = ty_noloc { { stype; tloc = $startpos, $endpos} }
 ;
 
-let var := loc_expr (~=IDENT; <SVar>)
+let var := loc_expr (~ = IDENT; <SVar> | ~ = CON; <SVar>)
+
+let atom_ntl :=
+  | LPAR; e = expr; RPAR; <>
+  | e = var; <>
+  | loc_expr(
+      | ~ = lit; <SLit>
+      | LSQU; ~ = separated_list(COMMA, expr); RSQU; <SLst>
+      | ~ = atom_ntl; LPAR; ~ = separated_list(COMMA, expr); RPAR; <SApp>
+      | x = atom_ntl; DOT; f = var; { SApp (f, [x]) }
+  )
 
 let atom :=
   | LPAR; e = expr; RPAR; <>
@@ -159,6 +167,19 @@ let no_dangling_expr :=
       IF; ~ = if_expr; THEN; t = no_dangling_expr; ELSE; f = no_dangling_expr;
           <SIf>)
 
+con_loc: string = CON { {string; strloc = $startpos, $endpos} } ;
+
+let pattern :=
+  | ~ = string_loc; <CVar>
+  | c = con_loc; { CCon (c, []) }
+  | ~ = con_loc; LPAR; ~ = separated_list(COMMA, pattern); RPAR; <CCon>
+
+let match_rules :=
+  | ~ = pattern; ARR; ~ = expr; SCOL+; <>
+
+let match_expr :=
+  | loc_expr(MATCH; ~ = atom_ntl; LCUR; SCOL*; ~ = match_rules*; RCUR; <SMat>)
+
 let if_expr :=
   | ~ = wal_expr(expr); <>
   | loc_expr(
@@ -167,8 +188,10 @@ let if_expr :=
     | IF; c = if_expr; r = return(expr); { SIf (c, r, empty_block) }
   )
 
+
 expr:
   | e = if_expr { e }
+  | e = match_expr { e }
   | e = block { e }
 ;
 

@@ -37,7 +37,9 @@ and tvar = TVUnbd of int | TVLink of pure_type
 
 type result = string_loc list * surface_type
 
-type surface_cons = CVar of string_loc | CCons of string * surface_cons list
+type surface_pattern
+  = CVar of string_loc
+  | CCon of string_loc * surface_pattern list
 
 type surface_desc
   = SIf  of surface_expr * surface_expr * surface_expr
@@ -45,7 +47,7 @@ type surface_desc
   | SRet of surface_expr
   | SVar of string
   | SLit of lit
-  | SMat of surface_expr * (surface_cons * surface_expr) list
+  | SMat of surface_expr * (surface_pattern * surface_expr) list
   | SApp of surface_expr * surface_expr list
   | SWal of string_loc * surface_expr
   | SFun of (string_loc * surface_type) list * result option * surface_expr
@@ -66,6 +68,10 @@ and surface_stmt =
    certains tests (par exemple ceux s'apparentant à des classes de types, comme
    print, pour lesquels on attend la fin de toutes les unifications) *)
 
+type typed_pattern
+  = TCVar of string * pure_type
+  | TCCon of int * pure_type * typed_pattern list
+
 type typed_desc
   = If  : typed_expr * typed_expr * typed_expr -> typed_desc
   | Bop : typed_expr * bop * typed_expr -> typed_desc
@@ -77,7 +83,9 @@ type typed_desc
   | Fun : (string * pure_type) list * typed_expr -> typed_desc
   | Blk : typed_stmt list -> typed_desc
   | Lst : typed_expr list -> typed_desc
+  | Con : int * typed_expr list -> typed_desc
   | Uop : uop * typed_expr -> typed_desc
+  | Mat : typed_expr * typed_pattern list -> typed_desc
   | CheckPredicate : 'b * ('b -> typed_expr) -> typed_desc
 and typed_expr
   = { texpr : typed_desc; ty : pure_type }
@@ -101,6 +109,8 @@ type annot_desc
   | AApp of annot_expr * annot_expr list
   | AWal of variable * annot_expr
   | AClo of variable list * string
+  | ACon of int * annot_expr list
+  | AMat of (annot_expr option) array * annot_expr
   | ABlk of annot_stmt list
   | ALst of annot_expr list
   | AUop of uop * annot_expr
@@ -113,10 +123,12 @@ and annot_stmt
   | ADVar of int * annot_expr
   | ADVal of int * annot_expr
 
+type decl_desc =
+  { name : string_loc ; args : (string_loc * surface_type) list
+  ; res : result option ; body : surface_expr }
+
 type surface_decl
-  = SDeclFun of
-      { name : string_loc ; args : (string_loc * surface_type) list
-      ; res : result option ; body : surface_expr }
+  = SDeclFun of decl_desc
   | SDeclType of (string_loc * surface_type) list
 
 type typed_decl =
