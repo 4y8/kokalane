@@ -85,7 +85,7 @@ type typed_desc
   | Lst : typed_expr list -> typed_desc
   | Con : int * typed_expr list -> typed_desc
   | Uop : uop * typed_expr -> typed_desc
-  | Mat : typed_expr * typed_pattern list -> typed_desc
+  | Mat : typed_expr * (typed_pattern * typed_expr) list -> typed_desc
   | CheckPredicate : 'b * ('b -> typed_expr) -> typed_desc
 and typed_expr
   = { texpr : typed_desc; ty : pure_type }

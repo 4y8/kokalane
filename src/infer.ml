@@ -152,6 +152,18 @@ let rec infer ctx {sexpr; sloc} = match sexpr with
   | SUop (Not, e) ->
       let e, eff = check ctx bool e in
       { texpr = Uop (Neg, e) ; ty = bool }, eff
+  | SMat (e, l) ->
+      let e, eff = infer ctx e in
+      let infer_pattern (p, r) =
+        let env, p = check_pattern ctx e.ty p in
+        let r, eff = infer { ctx with var = merge_ctx ctx.var env } r in
+        (p, r), eff
+      in
+      let rules, eff' = List.map infer_pattern l |> List.split in
+      (* on ne supporte pas les filtrages sans motif *)
+      let res_ty = (snd (List.hd rules)).ty in
+      List.iter2 (fun (_, {sloc; _}) (_, {ty; _}) -> check_type ctx ty res_ty sloc) l rules;
+      { texpr = Mat (e, rules) ; ty = res_ty }, List.fold_left (++) eff eff'
   | SFun (arg, t, b) ->
       let ret_type = match t with
           Some (_, t) -> erase_type t
@@ -162,7 +174,7 @@ let rec infer ctx {sexpr; sloc} = match sexpr with
       let arg_map = build_argmap arg in
       let var = merge_ctx ctx.var arg_map in
       let nctx = {ctx with var; ret_type = new_tvar ()} in
-      let body, eff = check nctx ret_type b in
+    let body, eff = check nctx ret_type b in
       let eff = match t with
         | None -> eff
         | Some (e, _) ->
@@ -232,9 +244,10 @@ and check_fun ctx l rt e =
   | _ -> failwith "internal error" (* impossible normalement *)
 
 and check_pattern ctx t = function
-  | CVar v -> SMap.singleton v.string t
+  | CVar v -> SMap.singleton v.string t, TCVar (v.string, t)
   | CCon (s, l) ->
-      let arg, res = inst_cons (SMap.find s.string ctx.cons) in
+      let n, sch = SMap.find s.string ctx.cons in
+      let arg, res = inst_cons sch in
       check_type ctx res t s.strloc;
       let merge x t t' = match t, t' with
         | None, t | t, None -> t
@@ -242,8 +255,8 @@ and check_pattern ctx t = function
             error_str s.strloc
               (sprintf "Variable %s is defined twice in pattern" x)
       in
-      List.map2 (check_pattern ctx) arg l
-      |> List.fold_left (SMap.merge merge) SMap.empty
+      let env, l = List.map2 (check_pattern ctx) arg l |> List.split in
+       List.fold_left (SMap.merge merge) SMap.empty env, TCCon (n, t, l)
 
 let check_decl var {name; args; res; body} =
   let ret_type, ret_eff = match res with
