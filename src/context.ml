@@ -11,8 +11,7 @@ type ctx =
   ; cons : (int * (int list * pure_type list * pure_type)) SMap.t }
 
 let merge_ctx c1 c2 =
-  SMap.merge (fun _ v1 v2 ->
-      match v1, v2 with
+  SMap.merge (fun _ v1 v2 -> match v1, v2 with
         None, None -> None
       | _, Some v -> Some v
       | Some v, _ -> Some v) c1 c2
@@ -31,8 +30,7 @@ let inst_cons (tv, arg, res) =
   let rec subst = function
     | TApp (s, l) -> TApp (s, subst l)
     | TCon s -> TCon s
-    | TFun (arg, res, eff) ->
-        TFun (List.map subst arg, subst res, eff)
+    | TFun (arg, res, eff) -> TFun (List.map subst arg, subst res, eff)
     | TVar r -> match !r with
       | TVUnbd i -> IMap.find i map
       | TVLink t -> subst t

@@ -83,7 +83,6 @@ type typed_desc
   | Fun : (string * pure_type) list * typed_expr -> typed_desc
   | Blk : typed_stmt list -> typed_desc
   | Lst : typed_expr list -> typed_desc
-  | Con : int * typed_expr list -> typed_desc
   | Uop : uop * typed_expr -> typed_desc
   | Mat : typed_expr * (typed_pattern * typed_expr) list -> typed_desc
   | CheckPredicate : 'b * ('b -> typed_expr) -> typed_desc
@@ -100,7 +99,7 @@ type variable
   | VLoc of int * bool
   | VClo of int * bool
 
-type annot_desc
+type annot_expr
   = AIf  of annot_expr * annot_expr * annot_expr
   | ABop of annot_expr * bop * annot_expr
   | ARet of annot_expr
@@ -109,14 +108,12 @@ type annot_desc
   | AApp of annot_expr * annot_expr list
   | AWal of variable * annot_expr
   | AClo of variable list * string
-  | ACon of int * annot_expr list
-  | AMat of (annot_expr option) array * annot_expr
   | ABlk of annot_stmt list
   | ALst of annot_expr list
   | AUop of uop * annot_expr
-
-and annot_expr
-  = { aexpr : annot_desc; aty : pure_type }
+  | AChkTag of int * annot_expr
+  | AArg of int * annot_expr
+  | AErr
 
 and annot_stmt
   = AExpr of annot_expr

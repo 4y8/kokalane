@@ -54,86 +54,118 @@ let rec mmap f = function
       let* tl = mmap f tl in
       return @@ hd :: tl
 
-let rec annot env {texpr; ty} =
-  let aty = fst (Type.remove_tvar ty) in
-  let* aexpr = match texpr with
-    | Lit l -> return @@ ALit l
-    | Bop (e1, op, e2) ->
-        let* e1 = annot env e1 in
-        let* e2 = annot env e2 in
-        return @@ ABop (e1, op, e2)
-    | If (e1, e2, e3) ->
-        let* e1 = annot env e1 in
-        let* e2 = annot env e2 in
-        let* e3 = annot env e3 in
-        return @@ AIf (e1, e2, e3)
-    | Ret e ->
-        let* e = annot env e in
-        return @@ ARet e
-    | App (e, l) ->
-        let* e = annot env e in
-        let* l = mmap (annot env) l in
-        return @@ AApp (e, l)
-    | Lst l ->
-        let* l = mmap (annot env) l in
-        return @@ ALst l
-    | Uop (op, e) ->
-        let* e = annot env e in
-        return @@ AUop (op, e)
-    | Blk l ->
+let rec mfold f l a = match l with
+  | [] -> return a
+  | hd :: tl ->
+      let* tl = mfold f tl a in
+      f hd tl
+
+let alloc_var env = 
+  let n = env.nvar in
+  env.nvar <- n + 8;
+  if env.max_var < env.nvar then
+    env.max_var <- env.nvar;
+  n
+
+let rec annot env {texpr; _} = match texpr with
+  | Lit l -> return @@ ALit l
+  | Bop (e1, op, e2) ->
+      let* e1 = annot env e1 in
+      let* e2 = annot env e2 in
+      return @@ ABop (e1, op, e2)
+  | If (e1, e2, e3) ->
+      let* e1 = annot env e1 in
+      let* e2 = annot env e2 in
+      let* e3 = annot env e3 in
+      return @@ AIf (e1, e2, e3)
+  | Ret e ->
+      let* e = annot env e in
+      return @@ ARet e
+  | App (e, l) ->
+      let* e = annot env e in
+      let* l = mmap (annot env) l in
+      return @@ AApp (e, l)
+  | Lst l ->
+      let* l = mmap (annot env) l in
+      return @@ ALst l
+  | Uop (op, e) ->
+      let* e = annot env e in
+      return @@ AUop (op, e)
+  | Blk l ->
+      let nvar = env.nvar in
+      let loc = env.loc in
+      let rec annot_blk = function
+        | [] -> return []
+        | TExpr e :: tl ->
+            let* e = annot env e in
+            let* tl = annot_blk tl in
+            return @@ (AExpr e) :: tl
+        | TDVal (x, e) :: tl ->
+            let* e = annot env e in
+            let n = alloc_var env in
+            env.loc <- SMap.add x (VLoc (- n - 8, false)) env.loc;
+            let* tl = annot_blk tl in
+            return @@ ADVal (- n - 8, e) :: tl
+        | TDVar (x, e) :: tl ->
+            let* e = annot env e in
+            let n = alloc_var env in
+            env.loc <- SMap.add x (VLoc (- n - 8, true)) env.loc;
+            let* tl = annot_blk tl in
+            return @@ ADVar (- n - 8, e) :: tl
+      in
+      let* l = annot_blk l in
+      let blk = ABlk l in
+      env.nvar <- nvar;
+      env.loc <- loc;
+      return blk
+  | Wal (x, e) ->
+      let* e = annot env e in
+      return @@ AWal (find_var env x, e)
+  | Var x ->
+      return @@ AVar (find_var env x)
+  | CheckPredicate (x, pred) ->
+      annot env (pred x)
+  | Mat (e, l) ->
+      let* mat = annot env e in
+      let annot_pattern (p, e) default =
+        let rec unfold (p, e) = match p with
+            TCVar (s, _) ->
+              SMap.singleton s e, ALit (LBool true)
+          | TCCon (n, _, l) ->
+              let and_expr e e' = ABop (e, And, e') in
+              let env, cond =
+                List.mapi (fun i p' -> (p', AArg (i, e))) l |>
+                  List.map unfold |> List.split
+              in
+              List.fold_left Context.merge_ctx SMap.empty env,
+              List.fold_left and_expr (AChkTag (n, e)) cond
+        in
         let nvar = env.nvar in
         let loc = env.loc in
-        let rec annot_blk = function
-          | [] -> return []
-          | TExpr e :: tl ->
-              let* e = annot env e in
-              let* tl = annot_blk tl in
-              return @@ (AExpr e) :: tl
-          | TDVal (x, e) :: tl ->
-              let* e = annot env e in
-              let n = env.nvar in
-              env.nvar <- n + 8;
-              if env.max_var < env.nvar then
-                env.max_var <- env.nvar;
-              env.loc <- SMap.add x (VLoc (- n - 8, false)) env.loc;
-              let* tl = annot_blk tl in
-              return @@ ADVal (- n - 8, e) :: tl
-          | TDVar (x, e) :: tl ->
-              let* e = annot env e in
-              let n = env.nvar in
-              env.nvar <- n + 8;
-              if env.max_var < env.nvar then
-                env.max_var <- env.nvar;
-              env.loc <- SMap.add x (VLoc (- n - 8, true)) env.loc;
-              let* tl = annot_blk tl in
-              return @@ ADVar (- n - 8, e) :: tl
-        in
-        let* l = annot_blk l in
-        let blk = ABlk l in
+        let assoc_expr, cond = unfold (p, mat) in
+        let vars = SMap.map (fun e -> - (alloc_var env) - 8, e) assoc_expr in
+        env.loc <- Context.merge_ctx env.loc (SMap.map (fun (n, _) -> VLoc (n, false)) vars);
+        let* e = annot env e in
+        let blk = SMap.fold (fun _ (n, e) tl ->
+            ADVal (n, e) :: tl
+          ) vars [AExpr e] in
         env.nvar <- nvar;
         env.loc <- loc;
-        return blk
-    | Wal (x, e) ->
-        let* e = annot env e in
-        return @@ AWal (find_var env x, e)
-    | Var x ->
-        return @@ AVar (find_var env x)
-    | CheckPredicate (x, pred) ->
-       let* e = annot env (pred x) in
-       return e.aexpr
-    | Fun (l, e) ->
-        let nenv =
-          { loc = arg_env l ; par = Context.merge_ctx env.par env.loc
-          ; clo = SMap.empty ; nvar = 0 ; nclo = 0 ; max_var = 0 }
-        in
-        let* e = annot nenv e in
-        let f = fresh_name () in
-        let* _ = add_fun (f, e, nenv.max_var) in
-        let clo = Array.make nenv.nclo (VLoc (-1, false)) in
-        SMap.iter (fun x (i, _) -> clo.(i) <- find_var env x) nenv.clo;
-        return @@
-          AClo (Array.to_list clo |> List.filter ((<>) (VLoc (-1, false))), f)
-  in return { aexpr ; aty }
+        return @@ AIf (cond, ABlk blk, default)
+      in
+      mfold annot_pattern l (AErr)
+  | Fun (l, e) ->
+      let nenv =
+        { loc = arg_env l ; par = Context.merge_ctx env.par env.loc
+        ; clo = SMap.empty ; nvar = 0 ; nclo = 0 ; max_var = 0 }
+      in
+      let* e = annot nenv e in
+      let f = fresh_name () in
+      let* _ = add_fun (f, e, nenv.max_var) in
+      let clo = Array.make nenv.nclo (VLoc (-1, false)) in
+      SMap.iter (fun x (i, _) -> clo.(i) <- find_var env x) nenv.clo;
+      return @@
+      AClo (Array.to_list clo |> List.filter ((<>) (VLoc (-1, false))), f)
 
 let annot_program p =
   let rec annot_prog = function

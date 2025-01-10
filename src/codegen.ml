@@ -18,7 +18,7 @@ let arith_op = [Add, addq; Sub, subq; Mul, imulq]
 
 let cmp_op = [Lt, setl; Gt, setg; Leq, setle; Geq, setge]
 
-let rec gen_expr ret {aexpr; aty} = match aexpr with
+let rec gen_expr ret = function
   | ALit l ->
       gen_lit l
   | ABop (e1, ((Add | Sub | Mul) as op), e2) ->
@@ -58,7 +58,7 @@ let rec gen_expr ret {aexpr; aty} = match aexpr with
       call (if op = Div then "int_div" else "int_mod") ++ addq (imm 16) !%rsp,
       d1 ++ d2
   | ABop (e1, Dif, e2) ->
-      let a, d = gen_expr ret ({aexpr = ABop (e1, Eq, e2); aty}) in
+      let a, d = gen_expr ret (ABop (e1, Eq, e2)) in
       a ++ xorq (imm 1) !%rax, d
   | ABop (_, Cat, _) -> failwith "impossible"
   | ABlk l -> gen_blk ret l

@@ -162,7 +162,9 @@ let rec infer ctx {sexpr; sloc} = match sexpr with
       let rules, eff' = List.map infer_pattern l |> List.split in
       (* on ne supporte pas les filtrages sans motif *)
       let res_ty = (snd (List.hd rules)).ty in
-      List.iter2 (fun (_, {sloc; _}) (_, {ty; _}) -> check_type ctx ty res_ty sloc) l rules;
+      List.iter2
+        (fun (_, {sloc; _}) (_, {ty; _}) -> check_type ctx ty res_ty sloc)
+        l rules;
       { texpr = Mat (e, rules) ; ty = res_ty }, List.fold_left (++) eff eff'
   | SFun (arg, t, b) ->
       let ret_type = match t with
@@ -244,7 +246,7 @@ and check_fun ctx l rt e =
   | _ -> failwith "internal error" (* impossible normalement *)
 
 and check_pattern ctx t = function
-  | CVar v -> SMap.singleton v.string t, TCVar (v.string, t)
+  | CVar v -> SMap.singleton v.string (t, false), TCVar (v.string, t)
   | CCon (s, l) ->
       let n, sch = SMap.find s.string ctx.cons in
       let arg, res = inst_cons sch in
