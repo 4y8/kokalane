@@ -18,7 +18,7 @@ let _ =
             (Printf.sprintf "Unexpected token: \"%s\"" (Lexing.lexeme lexbuf))
     in
     if !parse_only then exit 0;
-    let pt =
+    let pt, cons =
       try
         Infer.check_file p
       with
@@ -26,7 +26,7 @@ let _ =
     in
     let a = Annot.annot_program pt in
     if !type_only then exit 0;
-    X86_64.print_in_file ~file:(prefix ^ ".s") (Codegen.gen_prog a)
+    X86_64.print_in_file ~file:(prefix ^ ".s") (Codegen.gen_prog (a, cons))
   in
   Arg.parse ["--parse-only", Arg.Set parse_only, "Stop after parsing";
              "--type-only", Arg.Set type_only, "Stop after type checking"]

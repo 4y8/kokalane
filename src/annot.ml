@@ -129,7 +129,7 @@ let rec annot env {texpr; _} = match texpr with
       let* mat = annot env e in
       let annot_pattern (p, e) default =
         let rec unfold (p, e) = match p with
-            TCVar (s, _) ->
+          | TCVar (s, _) ->
               SMap.singleton s e, ALit (LBool true)
           | TCCon (n, _, l) ->
               let and_expr e e' = ABop (e, And, e') in

@@ -168,15 +168,15 @@ let rec infer ctx {sexpr; sloc} = match sexpr with
       { texpr = Mat (e, rules) ; ty = res_ty }, List.fold_left (++) eff eff'
   | SFun (arg, t, b) ->
       let ret_type = match t with
-          Some (_, t) -> erase_type t
+          Some (_, t) -> erase_type ctx.tctx t
         | None -> new_tvar ()
       in
-      let arg = List.map (fun (x, t) -> x, erase_type t) arg in
+      let arg = List.map (fun (x, t) -> x, erase_type ctx.tctx t) arg in
       let _, tys = List.split arg in
       let arg_map = build_argmap arg in
       let var = merge_ctx ctx.var arg_map in
       let nctx = {ctx with var; ret_type = new_tvar ()} in
-    let body, eff = check nctx ret_type b in
+      let body, eff = check nctx ret_type b in
       let eff = match t with
         | None -> eff
         | Some (e, _) ->
@@ -260,20 +260,20 @@ and check_pattern ctx t = function
       let env, l = List.map2 (check_pattern ctx) arg l |> List.split in
        List.fold_left (SMap.merge merge) SMap.empty env, TCCon (n, t, l)
 
-let check_decl var {name; args; res; body} =
+let check_decl (var, cons, tctx) {name; args; res; body} =
   let ret_type, ret_eff = match res with
       None -> new_tvar (), HasRec (ESet.singleton EDiv)
     | Some (eff, t) ->
-        erase_type t, erase_effects eff
+        erase_type tctx t, erase_effects eff
   in
-  let arg = List.map (fun (x, t) -> x, erase_type t) args in
+  let arg = List.map (fun (x, t) -> x, erase_type tctx t) args in
   let _, t = List.split arg in
   let var = SMap.add name.string (TFun (t, ret_type, ret_eff), false) var in
   let arg_map = build_argmap arg in
   let var = merge_ctx var arg_map in
   let ctx =
     { var ; ret_type ; rec_fun = name.string ; rec_has_console = ref None
-    ; cons = SMap.empty } (* todo cons *)
+    ; cons ; tctx }
   in
   let tbody, eff = check ctx ret_type body in
   let ret_type, poly = remove_tvar ret_type in
@@ -311,9 +311,9 @@ let check_file p =
     else
       SMap.add x.string (t, false) mp
   in
-  let rec check_file has_main var = function
+  let rec check_file has_main (var, cons, tctx) = function
     | SDeclFun hd :: tl ->
-        let d = check_decl var hd in
+        let d = check_decl (var, cons, tctx) hd in
         let has_main =
           if d.tname = "main" then
             if d.targs = [] then
@@ -323,10 +323,36 @@ let check_file p =
           else has_main
         in
         let var = add_function var (hd.name, d.res_type) in
-        d :: check_file has_main var tl
-    | SDeclType _ :: _ -> failwith "todo"
+        let tl, cons = check_file has_main (var, cons, tctx) tl in
+        d :: tl, cons
+    | SDeclType (n, tv, c) :: tl ->
+        let fresh_vars =
+          List.init (List.length tv) (fun _ -> incr tvar; !tvar)
+        in
+        let tv =
+          List.map2 (fun s t -> (s, TVar (ref (TVUnbd t)))) tv fresh_vars
+        in
+        let tv_dic = tv |> List.to_seq |> SMap.of_seq in
+        let ret_type = TApp (n, snd (List.split tv)) in
+        let cons_types =
+          List.map
+            (fun (s, t) -> s, List.map (erase_type tctx ~tv:tv_dic) t)
+            c
+        in
+        let cons_map =
+          List.mapi (fun i (s, t) -> s, (i, (fresh_vars, t, ret_type)))
+            cons_types
+          |> List.to_seq |> SMap.of_seq in
+        let fun_map =
+          List.map
+            (fun (s, t) -> s, (TFun (t, ret_type, NoRec ESet.empty), false))
+            cons_types
+          |> List.to_seq |> SMap.of_seq in
+        check_file has_main
+          (Context.merge_ctx var fun_map, Context.merge_ctx cons cons_map,
+           SMap.add n (List.length tv) tctx) tl
     | [] ->
-        if has_main then [] else
+        if has_main then [], cons else
           raise NoMain
   in
-  check_file false SMap.empty p
+  check_file false (SMap.empty, SMap.empty, SMap.empty) p

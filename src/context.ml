@@ -8,7 +8,8 @@ type ctx =
   ; ret_type : pure_type
   ; rec_fun : string
   ; rec_has_console : bool option ref
-  ; cons : (int * (int list * pure_type list * pure_type)) SMap.t }
+  ; cons : (int * (int list * pure_type list * pure_type)) SMap.t
+  ; tctx : int SMap.t }
 
 let merge_ctx c1 c2 =
   SMap.merge (fun _ v1 v2 -> match v1, v2 with
@@ -28,8 +29,7 @@ let inst_cons (tv, arg, res) =
     List.map (fun x -> x, new_tvar ()) tv |> List.to_seq |> IMap.of_seq
   in
   let rec subst = function
-    | TApp (s, l) -> TApp (s, subst l)
-    | TCon s -> TCon s
+    | TApp (s, l) -> TApp (s, List.map subst l)
     | TFun (arg, res, eff) -> TFun (List.map subst arg, subst res, eff)
     | TVar r -> match !r with
       | TVUnbd i -> IMap.find i map

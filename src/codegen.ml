@@ -134,6 +134,16 @@ let rec gen_expr ret = function
         | Neg -> a ++ negq !%rax
         | Not -> a ++ xorq (imm 1) !%rax
       in a, d
+  | AChkTag (n, e) ->
+      let a, d = gen_expr ret e in
+      a ++ movq (ind rax) !%r13 ++
+      xorl !%eax !%eax ++ cmpq (imm n) !%r13 ++ sete !%al,
+      d
+  | AArg (n, e) ->
+      let a, d = gen_expr ret e in
+      a ++ movq (ind rax) !%r13 ++ movq (ind ~ofs:(8 * n) r13) !%rax, d
+  | AErr ->
+      movq (imm 1) !%rax ++ movq (imm 2) !%rbx ++ int 0x80, nop
 
 and gen_blk ret = function
   | [] -> nop, nop
@@ -437,7 +447,23 @@ _clo_lstcat:
 	.quad	kk_lstcat
 "
 
-let gen_prog pt =
+let gen_cons m =
+  let gen_cons s (i, (_, l, _)) =
+    let n = List.length l in
+    let l = new_label () in
+    label l ++
+    movq (imm (n + 1)) !%rdi ++
+    call "kokalloc" ++
+    movq (imm i) (ind rax) ++
+    (List.init n
+       (fun i -> movq (ind ~ofs:((i + 1) * 8) rsp) !%r13 ++
+                 movq !%r13(ind ~ofs:((i + 1) * 8) rax))
+     |> List.fold_left (++) nop)
+    ++ ret, label ("_clo_" ^ s) ++ address [l]
+  in SMap.fold (fun s c (text, data) ->
+    let t, d = gen_cons s c in text ++ t, data ++ d) m (nop, nop)
+
+let gen_prog (pt, cons) =
   let rec gen_prog = function
     [] -> nop, nop
   | hd :: tl ->
@@ -446,9 +472,10 @@ let gen_prog pt =
       a ++ atl, d ++ dtl
   in
   let text, data = gen_prog pt in
+  let cons_text, cons_data = gen_cons cons in
   { text =
-      globl "main" ++ inline prelude ++ text ++
+      globl "main" ++ inline prelude ++ text ++ cons_text ++
       label "main" ++ pushq !%r12 ++ pushq !%r13 ++ pushq !%r14 ++
       pushq !%r15 ++ call ".funmain" ++ popq r15 ++ popq r14 ++ popq r13 ++
       popq r12 ++ xorl !%eax !%eax ++ ret
-  ; data = data ++ inline prelude_data }
+  ; data = data ++ cons_data ++ inline prelude_data }

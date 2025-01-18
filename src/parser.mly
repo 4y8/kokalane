@@ -44,7 +44,8 @@ string_loc: string = IDENT { {string; strloc = $startpos, $endpos} } ;
 
 atype_noloc:
   | t = IDENT { STCon t }
-  | v = string_loc LANG t = ty RANG { STApp (v, t) }
+  | v = string_loc LANG l = separated_nonempty_list(COMMA, ty) RANG
+    { STApp (v, l) }
 ;
 
 atype:
@@ -225,9 +226,20 @@ arg: x = string_loc DCOL t = ty { x, t } ;
 let funbody(expr) :=
     LPAR; x = separated_list(COMMA, arg); RPAR; ~ = option(ann); e = expr; <>
 
-decl:
+fun_decl:
     FUN name = string_loc fb = funbody(expr) SCOL+
     { let args, res, body = fb in SDeclFun { name; args; body; res } }
 ;
+
+let con_decl := ~ = CON; LCUR; SCOL*; IDENT ; DCOL; ~ = separated_list(SCOL+, ty); RCUR; <>
+
+type_decl:
+  | TYPE n = IDENT LANG tv = separated_list(COMMA, IDENT) RANG
+    LCUR SCOL* c = con_decl* RCUR { SDeclType (n, tv, c) }
+  | TYPE n = IDENT
+    LCUR SCOL* c = con_decl* RCUR { SDeclType (n, [], c) }
+;
+
+decl: f = fun_decl { f } | t = type_decl { t }
 
 file: SCOL* l = decl* EOF { l } ;

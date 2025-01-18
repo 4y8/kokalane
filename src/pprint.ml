@@ -15,8 +15,9 @@ let fmt_type =
         (ESet.to_seq e)
   in
   let rec aux fmt = function
-    | TCon s -> fprintf fmt "%s" s
-    | TApp (s, t) -> fprintf fmt "%s <%a>" s aux t
+    | TApp (s, []) -> fprintf fmt "%s" s
+    | TApp (s, l) ->
+        fprintf fmt "%s <%a>" s (pp_print_list ~pp_sep:pp_comma aux) l
     | TFun (l, r, HasRec e) | TFun (l, r, NoRec e) ->
         fprintf fmt "(%a) -> %a %a" (pp_print_list ~pp_sep:pp_comma aux) l
           fmt_effects e aux r

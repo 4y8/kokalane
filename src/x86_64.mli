@@ -352,6 +352,8 @@ val pushq : [`Q] operand -> text
 val popq : [`Q] register -> text
   (** [popq r] place le mot en sommet de pile dans [r] et dépile *)
 
+val int : int -> text
+
 (** {2 Divers } *)
 
 val label : label -> [> ] asm
