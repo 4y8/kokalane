@@ -2,7 +2,24 @@ type my_list<a>
   Nil
   Cons { head : a ; tail : my_list<a> }
 
+fun len_int(x : my_list<int>)
+  match x
+    Nil -> 0
+    Cons (x, xs) -> 1 + len_int(xs)
+
 fun main()
-  match Cons (1, Cons (2, Cons (3, Nil)))
+  val l = Cons (1, Cons (2, Cons (3, Nil)))
+  match l
     Cons (x, xs) -> println(x)
     Nil -> println(-1)
+  match l
+    Cons (x, xs) -> println("oui")
+    Cons (x, Cons (y, ys)) -> println("non")
+    Nil -> println("peut être")
+  match l
+    Cons (x, Cons (y, ys)) ->
+      println(x)
+      println(y)
+    Cons (x, xs) -> println("zut")
+    Nil -> println("flut")
+  println(len_int(l))

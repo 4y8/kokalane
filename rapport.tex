@@ -13,28 +13,44 @@
 \maketitle
 \section{Le compilateur}
 Le compilateur passe tous les tests d'analyse syntaxique, de typage et de
-production de code.
+production de code. On a ajouté la possibilité de définir des types algébriques
+de données et du filtrage par motif sur eux\footnote{le filtrage par motif ne
+fonctionne que sur les types définis dans le programme, en particulier, il ne
+fonctionne pas sur les listes de la librairie standards, les entiers, ou les
+chaînes de caractères, par manque de temps}.
 
 \subsection{Analyse lexicale}
 Pour l'analyse lexicale, on implémente l'algorithme donné dans l'énoncé, en
-utilisant une file permettant au \textit{lexer} de renvoyer plusieurs lexèmes en une
-fois.
+utilisant une file permettant au \textit{lexer} de renvoyer plusieurs lexèmes en
+une fois.
 
 Pour l'indentation, on a fait le choix de ne prendre en compte que les espaces
 pour éviter de choisir une valeur arbitraire pour les tabulations. En
 particulier, deux espaces suivies d'une tabulation puis d'une autre espace
 compte comme une indentation de deux.
 
+On a fait le choix de ne plus considérer \texttt{>} comme une fin de
+continuation, pour qu'un lexème \texttt{\{} soit émis à la fin de la première
+ligne du code de la figure~\ref{rang}.
+\begin{figure}[h]
+\begin{verbatim}
+type option<a>
+  None
+  Some { x : a }
+\end{verbatim}
+\caption{\texttt{>} ne peut être une fin de continuation}\label{rang}
+\end{figure}
+
 \subsection{Analyse syntaxique}
-Pour l'analyse syntaxique, on modifie la grammaire donnée pour la rendre LR(1)
-(en particulier, on n'utilise les directives d'associativité que pour les
-opérateurs binaires). On a fait ce choix sur une recommandation de François
-Pottier donnée après un ``rapport de bug''\footnote{suite à l'utilisation de
-directives, \texttt{menhir} a renvoyé une erreur: \texttt{Conflict
-  (unexplicable) [...]  Please send your grammar to Menhir's developers}, il
-s'agit, d'après la réponse reçu par mail, d'un problème connu que l'on peut
-éviter en donnant une grammaire LR(1) (de ce que j'ai compris en tout
-cas)}. Certaines constructions syntaxiques ont nécessité une attention
+Pour l'analyse syntaxique, on modifie la grammaire donnée pour la rendre
+\texttt{LR(1)} (en particulier, on n'utilise les directives d'associativité que
+pour les opérateurs binaires). On a fait ce choix sur une recommandation de
+François Pottier donnée après un ``rapport de bug''\footnote{suite à
+l'utilisation de directives, \texttt{menhir} a renvoyé une erreur:
+\texttt{Conflict (unexplicable) [...]  Please send your grammar to Menhir's
+  developers}, il s'agit, d'après la réponse reçu par mail, d'un problème connu
+que l'on peut éviter en donnant une grammaire LR(1) (de ce que j'ai compris en
+tout cas)}. Certaines constructions syntaxiques ont nécessité une attention
 particulière:
 \begin{itemize}
   \item les opérateurs binaires doivent traiter à part l'expression la plus à
@@ -53,9 +69,10 @@ particulière:
 
 \subsection{Typage}
 Pour le typage, on implémente l'algorithme J d'inférence (comme en TD) de type
-sans la généralisation ni l'instantiation, auquel on ajoute les effets. Pour les
-fonctions de librairies standards qui ont du polymorphisme d'effet, on vérifie
-que les types ont la bonne forme sans se soucier des effets.
+sans la généralisation ni l'instantiation, auquel on ajoute les effets. On a de
+l'instantiation pour les constructeurs de types. Pour les fonctions de
+librairies standards qui ont du polymorphisme d'effet, on vérifie que les types
+ont la bonne forme sans se soucier des effets.
 
 \begin{figure}[h]
 \begin{verbatim}
@@ -118,21 +135,11 @@ expressions.
 
 \subsection{Production de code}
 Après le typage, on explicite les fermetures et les positions des variables sur
-la pile. Pour la génération de code on suit, pour l'instant, l'énoncé à la
-différence que lorsqu'on appelle une fonction, un pointeur vers la fermeture est
-placée dans le registre \texttt{\%r12}.
+la pile. Pour la génération de code on suit l'énoncé à la différence que
+lorsqu'on appelle une fonction, un pointeur vers la fermeture est placée dans le
+registre \texttt{\%r12}. Dès qu'on compile une expression, son résultat se
+trouve en \texttt{\%rax}.
 
-\section{Améliorations et extensions possibles}
-On envisage plusieurs (plus ou moins ambitieuses) pistes pour continuer le
-compilateur:
-\begin{itemize}
-  \item polymorphisme de type,
-  \item ajout de filtrage par motif et de type de donnés algébriques,
-  \item polymorphisme d'effet,
-  \item libération de la mémoire des programmes, par exemple avec le comptage de
-    références donné par l'algorithme perceus~\cite{reinking2021perceus} pour
-    rester proche du vrai Koka,
-  \item compilation optimisante comme vue en cours
-\end{itemize}
-\printbibliography
+Le filtrage par motif est compilé de manière naïve. Tous les constructeurs (même
+ceux sans argument) sont \textit{boxed}.
 \end{document}

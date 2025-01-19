@@ -10,3 +10,6 @@ fun main()
   match Some (foo())
     Some (s) -> println(s)
     None -> println("monde")
+  match None
+    Some (s) -> println(42)
+    None -> println(7 * 8)

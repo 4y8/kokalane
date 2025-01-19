@@ -3,9 +3,11 @@ let _ =
   let type_only = ref false in
   let read_file f =
     let ic = open_in f in
-    let prefix = if not (String.ends_with ~suffix:".koka" f) then
-        (Printf.eprintf "usage: kokac infile.koka"; exit 1)
-      else String.sub f 0 (String.length f - 5)
+    let prefix =
+      try
+        Filename.chop_suffix f ".koka"
+      with
+        Invalid_argument _ -> Printf.eprintf "usage: kokac infile.koka"; exit 1
     in
     let lexbuf = Lexing.from_channel ~with_positions:true ic in
     Lexing.set_filename lexbuf f;

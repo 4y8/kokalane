@@ -1,6 +1,13 @@
 open Syntax
 open X86_64
 
+type ret_info = {
+  label : string;
+  incr : int
+}
+
+let push { label ; incr } = { label ; incr = incr + 8 }
+
 let nfresh = ref 0
 
 let new_int () = incr nfresh; !nfresh
@@ -22,29 +29,23 @@ let rec gen_expr ret = function
   | ALit l ->
       gen_lit l
   | ABop (e1, ((Add | Sub | Mul) as op), e2) ->
-      let a1, d1 = gen_expr ret e1 in
+      let a1, d1 = gen_expr (push ret) e1 in
       let a2, d2 = gen_expr ret e2 in
       a2 ++ pushq !%rax ++ a1 ++ popq r13 ++
       (List.assoc op arith_op) !%r13 !%rax,
       d1 ++ d2
   | ABop (e1, ((Lt | Gt | Leq | Geq) as op), e2) ->
       let a1, d1 = gen_expr ret e1 in
-      let a2, d2 = gen_expr ret e2 in
+      let a2, d2 = gen_expr (push ret) e2 in
       a1 ++ pushq !%rax ++ a2 ++ popq r13 ++ movq !%rax !%r14 ++
       xorl !%eax !%eax ++ cmpq !%r14 !%r13 ++ (List.assoc op cmp_op) !%al,
       d1 ++ d2
-  | ABop (e1, And, e2) ->
+  | ABop (e1, (And | Or as op), e2) ->
       let a1, d1 = gen_expr ret e1 in
       let a2, d2 = gen_expr ret e2 in
       let lazy_branch = new_label () in
-      a1 ++ testq !%rax !%rax ++ jz lazy_branch ++ a2
-        ++ label lazy_branch, d1 ++ d2
-  | ABop (e1, Or, e2) ->
-      let a1, d1 = gen_expr ret e1 in
-      let a2, d2 = gen_expr ret e2 in
-      let lazy_branch = new_label () in
-      a1 ++ testq !%rax !%rax ++ jnz lazy_branch ++ a2
-        ++ label lazy_branch, d1 ++ d2
+      a1 ++ testq !%rax !%rax ++ (if op = And then jz else jnz) lazy_branch ++
+      a2 ++ label lazy_branch, d1 ++ d2
   | ABop (e1, Eq, e2) ->
       let a1, d1 = gen_expr ret e1 in
       let a2, d2 = gen_expr ret e2 in
@@ -52,7 +53,7 @@ let rec gen_expr ret = function
       xorl !%eax !%eax ++ cmpq !%rdi !%rsi ++ sete !%al,
       d1 ++ d2
   | ABop (e1, (Div | Mod as op), e2) ->
-      let a1, d1 = gen_expr ret e1 in
+      let a1, d1 = gen_expr (push ret) e1 in
       let a2, d2 = gen_expr ret e2 in
       a2 ++ pushq !%rax ++ a1 ++ pushq !%rax ++
       call (if op = Div then "int_div" else "int_mod") ++ addq (imm 16) !%rsp,
@@ -72,16 +73,20 @@ let rec gen_expr ret = function
       label false_label ++ af ++ label end_label, dc ++ dt ++ df
   | ARet e ->
       let a, d = gen_expr ret e in
-      a ++ jmp ret, d
+      a ++ (if ret.incr = 0 then nop else addq (imm ret.incr) !%rsp) ++
+      jmp ret.label, d
   | AApp (f, l) ->
+      let n = 8 * List.length l in
+      let ret = { label = ret.label ; incr = ret.incr + n + 8} in
       let af, df = gen_expr ret f in
-      let al, dl = List.map (gen_expr ret) l |> List.split in
+      let al, dl = List.mapi
+          (fun i e ->
+             let a, d = gen_expr ret e in
+             a ++ movq !%rax (ind ~ofs:(8 * i) rsp), d) l |> List.split in
       let d = List.fold_left (++) df dl in
-      let al = List.fold_left
-          (fun code aarg -> aarg ++ pushq !%rax ++ code) nop al
-      in
-      pushq !%r12 ++ al ++ af ++ movq !%rax !%r12 ++ call_star (ind r12) ++
-      addq (imm (8 * List.length l)) !%rsp ++ popq r12, d
+      let al = List.fold_left (fun code aarg -> aarg ++ code) nop al in
+      pushq !%r12 ++ subq (imm n) !%rsp ++ al ++ af ++ movq !%rax !%r12 ++
+      call_star (ind r12) ++ addq (imm n) !%rsp ++ popq r12, d
   | AWal (x, e) ->
       let a, d = gen_expr ret e in
       let a = match x with
@@ -122,7 +127,7 @@ let rec gen_expr ret = function
       let rec gen_lst = function
           [] -> xorl !%eax !%eax, nop
         | hd :: tl ->
-            let a, d = gen_expr ret hd in
+            let a, d = gen_expr (push ret) hd in
             let atl, dtl = gen_lst tl in
             atl ++ pushq !%rax ++ a ++ popq r13 ++ movq !%rax !%r14 ++
             movq (imm 16) !%rdi ++ call "kokalloc" ++ movq !%r14 (ind rax) ++
@@ -163,7 +168,7 @@ and gen_blk ret = function
       a ++ atl, d ++ dtl
 
 let gen_fun (f, e, n) =
-  let a, d = gen_expr (".ret" ^ f) e in
+  let a, d = gen_expr { label = (".ret" ^ f) ; incr = 0 } e in
   label (".fun" ^ f) ++
   pushq !%rbp ++
   pushq !%r12 ++
