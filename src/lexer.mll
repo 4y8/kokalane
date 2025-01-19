@@ -19,7 +19,9 @@
   module TSet = Set.Make(Token)
 
   let end_con =
-    [PLUS; MINUS; TIMES; DIV; MOD; DPLUS; LANG; RANG; LEQ; GEQ; EQ;
+    [PLUS; MINUS; TIMES; DIV; MOD; DPLUS; LANG;
+     (*RANG;*)
+     LEQ; GEQ; EQ;
      DIF; AND; OR; LPAR; LCUR] |> TSet.of_list
 
   let beg_con =
@@ -122,6 +124,8 @@ rule lexer = parse
   | "/*" { comment lexbuf }
   | ('-'? ('0' | ['1'-'9'] digit*)) as s { [INT (int_of_string s)] }
   | "elif" { [ELSE; IF] }
+  | "True" { [TRUE] }
+  | "False" { [FALSE] }
   | ident as s { match Hashtbl.find_opt ident_tbl s with
     None -> [IDENT s] | Some t -> [t] }
   | upident as s { [CON s] }

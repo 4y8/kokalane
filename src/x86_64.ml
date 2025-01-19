@@ -342,7 +342,7 @@ let space n = ins ".space %d" n
 let pushq a = ins "pushq %a" a ()
 let popq r = ins "popq %s" r
 
-let int n = ins "int %d" n
+let int n = ins "int $%d" n
 
 type program = {
   text : [ `text ] asm;

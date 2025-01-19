@@ -8,7 +8,7 @@
       | _ -> SApp ({sexpr; sloc}, [x])
 %}
 
-%token ELSE FN FUN IF RETURN THEN VAL VAR TYPE MATCH
+%token ELSE FN FUN IF RETURN THEN VAL VAR TYPE MATCH FALSE TRUE
 %token <string>STRING
 %token <int>INT
 %token <string>IDENT
@@ -38,6 +38,8 @@ let loc_expr(expr) ==
 let lit :=
   | ~ = INT; <LInt>
   | ~ = STRING; <LString>
+  | TRUE; { LBool true }
+  | FALSE; { LBool false }
   | LPAR; RPAR; { LUnit }
 
 string_loc: string = IDENT { {string; strloc = $startpos, $endpos} } ;
@@ -231,13 +233,17 @@ fun_decl:
     { let args, res, body = fb in SDeclFun { name; args; body; res } }
 ;
 
-let con_decl := ~ = CON; LCUR; SCOL*; IDENT ; DCOL; ~ = separated_list(SCOL+, ty); RCUR; <>
+let field := IDENT; DCOL; ~ = ty; SCOL+; <>
+
+let con_decl :=
+  | ~ = CON; LCUR; SCOL*; ~ = field+; RCUR; SCOL+; <>
+  | s = CON; SCOL+; { (s, []) }
 
 type_decl:
   | TYPE n = IDENT LANG tv = separated_list(COMMA, IDENT) RANG
-    LCUR SCOL* c = con_decl* RCUR { SDeclType (n, tv, c) }
+    LCUR SCOL* c = con_decl* RCUR SCOL+ { SDeclType (n, tv, c) }
   | TYPE n = IDENT
-    LCUR SCOL* c = con_decl* RCUR { SDeclType (n, [], c) }
+    LCUR SCOL* c = con_decl* RCUR SCOL+ { SDeclType (n, [], c) }
 ;
 
 decl: f = fun_decl { f } | t = type_decl { t }

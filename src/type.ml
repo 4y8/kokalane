@@ -3,7 +3,7 @@ open Syntax
 open Syntax.Effect
 open Format
 
-let valid_types =
+let base_types =
   ["int", 0; "bool", 0; "unit", 0; "string", 0; "list", 1; "maybe", 1]
   |> List.to_seq |> SMap.of_seq
 

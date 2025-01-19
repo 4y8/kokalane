@@ -19,16 +19,8 @@ let build_argmap =
 let rec infer ctx {sexpr; sloc} = match sexpr with
   | SLit l -> { texpr = Lit l ; ty = type_of_lit l }, NoRec ESet.empty
   | SVar x ->
-      begin match SMap.find_opt x ctx.var with
-        Some (t, _) ->
-          let eff =
-            if x = ctx.rec_fun
-            then NoRec (ESet.singleton EDiv)
-            else NoRec ESet.empty
-          in
-          { texpr = Var x ; ty = t }, eff
-      | None -> Error.unknown_var sloc x
-      end
+      let t, eff = find_var ctx sloc x in
+      { texpr = Var x ; ty = t }, eff
   | SWal (x, e) ->
       begin match SMap.find_opt x.string ctx.var with
       | None -> unknown_var x.strloc x.string
@@ -152,7 +144,9 @@ let rec infer ctx {sexpr; sloc} = match sexpr with
   | SUop (Not, e) ->
       let e, eff = check ctx bool e in
       { texpr = Uop (Neg, e) ; ty = bool }, eff
-  | SMat (e, l) ->
+  (* on ne filtre que sur des variables pour éviter d'évaluer plusieurs fois
+     l'expression *)
+  | SMat (({sexpr = SVar _; _}) as e, l) ->
       let e, eff = infer ctx e in
       let infer_pattern (p, r) =
         let env, p = check_pattern ctx e.ty p in
@@ -166,6 +160,16 @@ let rec infer ctx {sexpr; sloc} = match sexpr with
         (fun (_, {sloc; _}) (_, {ty; _}) -> check_type ctx ty res_ty sloc)
         l rules;
       { texpr = Mat (e, rules) ; ty = res_ty }, List.fold_left (++) eff eff'
+  | SMat (e, l) ->
+      incr tvar;
+      let x  = string_of_int !tvar in
+      let v = { sexpr = SVar x ; sloc = e.sloc } in
+      infer ctx
+        { sexpr =
+            SBlk ([{ stmt = SDVal (x, e); stmloc = e.sloc}
+                 ; { stmt = SExpr { sexpr = SMat(v, l) ; sloc }
+                   ; stmloc = sloc}])
+        ; sloc }
   | SFun (arg, t, b) ->
       let ret_type = match t with
           Some (_, t) -> erase_type ctx.tctx t
@@ -258,7 +262,7 @@ and check_pattern ctx t = function
               (sprintf "Variable %s is defined twice in pattern" x)
       in
       let env, l = List.map2 (check_pattern ctx) arg l |> List.split in
-       List.fold_left (SMap.merge merge) SMap.empty env, TCCon (n, t, l)
+      List.fold_left (SMap.merge merge) SMap.empty env, TCCon (n, t, l)
 
 let check_decl (var, cons, tctx) {name; args; res; body} =
   let ret_type, ret_eff = match res with
@@ -334,25 +338,20 @@ let check_file p =
         in
         let tv_dic = tv |> List.to_seq |> SMap.of_seq in
         let ret_type = TApp (n, snd (List.split tv)) in
-        let cons_types =
-          List.map
-            (fun (s, t) -> s, List.map (erase_type tctx ~tv:tv_dic) t)
-            c
-        in
+        let tctx = SMap.add n (List.length tv) tctx in
         let cons_map =
-          List.mapi (fun i (s, t) -> s, (i, (fresh_vars, t, ret_type)))
-            cons_types
-          |> List.to_seq |> SMap.of_seq in
-        let fun_map =
-          List.map
-            (fun (s, t) -> s, (TFun (t, ret_type, NoRec ESet.empty), false))
-            cons_types
+          List.mapi
+            (fun i (s, t) ->
+               s,
+               (i, (fresh_vars, List.map (erase_type tctx ~tv:tv_dic) t,
+                    ret_type)))
+            c
           |> List.to_seq |> SMap.of_seq in
         check_file has_main
-          (Context.merge_ctx var fun_map, Context.merge_ctx cons cons_map,
-           SMap.add n (List.length tv) tctx) tl
+          (var, Context.merge_ctx cons cons_map,
+           tctx) tl
     | [] ->
         if has_main then [], cons else
           raise NoMain
   in
-  check_file false (SMap.empty, SMap.empty, SMap.empty) p
+  check_file false (SMap.empty, SMap.empty, base_types) p

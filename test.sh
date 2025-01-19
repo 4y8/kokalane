@@ -9,4 +9,4 @@ tar xzf tests-29-oct.tar.gz
 chmod +x test
 ./test -all ../kokac
 cd ..
-rm -r test
+#rm -r test

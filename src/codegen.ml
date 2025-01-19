@@ -141,7 +141,7 @@ let rec gen_expr ret = function
       d
   | AArg (n, e) ->
       let a, d = gen_expr ret e in
-      a ++ movq (ind rax) !%r13 ++ movq (ind ~ofs:(8 * n) r13) !%rax, d
+      a ++ movq (ind ~ofs:(8 * (n + 1)) rax) !%rax, d
   | AErr ->
       movq (imm 1) !%rax ++ movq (imm 2) !%rbx ++ int 0x80, nop
 
@@ -449,17 +449,18 @@ _clo_lstcat:
 
 let gen_cons m =
   let gen_cons s (i, (_, l, _)) =
-    let n = List.length l in
-    let l = new_label () in
-    label l ++
-    movq (imm (n + 1)) !%rdi ++
-    call "kokalloc" ++
-    movq (imm i) (ind rax) ++
-    (List.init n
-       (fun i -> movq (ind ~ofs:((i + 1) * 8) rsp) !%r13 ++
-                 movq !%r13(ind ~ofs:((i + 1) * 8) rax))
-     |> List.fold_left (++) nop)
-    ++ ret, label ("_clo_" ^ s) ++ address [l]
+    if l = [] then nop, label ("_clo_" ^ s) ++ dquad [i] else
+      let n = List.length l in
+      let l = new_label () in
+      label l ++
+      movq (imm (8 * (n + 1))) !%rdi ++
+      call "kokalloc" ++
+      movq (imm i) (ind rax) ++
+      (List.init n
+         (fun i -> movq (ind ~ofs:((i + 1) * 8) rsp) !%r13 ++
+                   movq !%r13(ind ~ofs:((i + 1) * 8) rax))
+       |> List.fold_left (++) nop)
+      ++ ret, label ("_clo_" ^ s) ++ address [l]
   in SMap.fold (fun s c (text, data) ->
     let t, d = gen_cons s c in text ++ t, data ++ d) m (nop, nop)
 

@@ -1,0 +1,8 @@
+type my_list<a>
+  Nil
+  Cons { head : a ; tail : my_list<a> }
+
+fun main()
+  match Cons (1, Cons (2, Cons (3, Nil)))
+    Cons (x, xs) -> println(x)
+    Nil -> println(-1)

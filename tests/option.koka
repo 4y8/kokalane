@@ -1,0 +1,12 @@
+type option <a>
+  None
+  Some { x : a }
+
+fun foo()
+  println("hello")
+  "world"
+
+fun main()
+  match Some (foo())
+    Some (s) -> println(s)
+    None -> println("monde")

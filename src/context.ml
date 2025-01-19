@@ -36,3 +36,22 @@ let inst_cons (tv, arg, res) =
       | TVLink t -> subst t
   in
   List.map subst arg, subst res
+
+let find_var ctx sloc v =
+  if 'A' <= v.[0] && 'Z' >= v.[0] then
+    match SMap.find_opt v ctx.cons with
+    | Some ((_, t)) ->
+        let l, r = inst_cons t in
+        if l = [] then r, NoRec ESet.empty else
+          TFun (l, r, NoRec ESet.empty), NoRec ESet.empty
+    | None -> Error.unknown_var sloc v
+  else
+    match SMap.find_opt v ctx.var with
+    | Some (t, _) ->
+        let eff =
+          if v = ctx.rec_fun
+          then NoRec (ESet.singleton EDiv)
+          else NoRec ESet.empty
+        in
+        t, eff
+    | None -> Error.unknown_var sloc v
